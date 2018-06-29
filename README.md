@@ -20,6 +20,9 @@ This project supercedes [refine_viaf](https://github.com/codeforkjeff/refine_via
     - [ORCID](#orcid)
     - [Open Library](#open-library)
     - [Solr](#solr)
+    - [Wikifier](#wikifier)
+    - [Geonames](#geonames)
+    - [Google Geotargets](#google-geotargets)
 - [Running Conciliator on Your Own Computer](#running-conciliator-on-your-own-computer)
 - [Docker Image](#docker-image)
 - [Configuring OpenRefine](#configuring-openrefine)
@@ -47,6 +50,10 @@ instructions.
   - [ORCID](http://orcid.org) - digital identifiers for researchers
   - [Open Library](http://openlibrary.org) - an open, editable library catalog
   - Any [Apache Solr](https://lucene.apache.org/solr/) collection
+  - [Wikifier](#wikifier) - text annotation with links to relevant Wikipedia concepts
+  - [Geonames](#geonames) - geographical database
+  - [Google Geotargets](#google-geotargets) - identifiers for AdWords locations
+  - [Google ProductsServices](#google-productsservices) - identifiers for AdWords categories
   - more to come (if you can contribute, please submit pull requests!)
 
 * Good performance (uses threads; stable memory usage; caches results)
@@ -103,6 +110,31 @@ instructions.
 * Any Apache Solr collection can be used as a data source. See the
   sample commented-out lines in the `conciliator.properties` file for
   more details.
+
+### Wikifier
+
+* Uses the Wikifier Wikification API, thus a personal key is required. Fill the
+  wikifier.key parameter in the `conciliator.properties` file.
+* Automatic matching disabled by default
+
+### Geonames
+
+* Uses the GeoNames Search Webservice API, thus a personal key is required. Fill the
+  geonames.key parameter in the `conciliator.properties` file.
+* You must undergo Geonames [Terms and Conditions](http://www.geonames.org/export/#terms)
+* Automatic matching disabled by default
+
+### Google Geotargets
+
+* Uses a local RDF dump (`AdWords_API_Location_Criteria_DE_ES.ttl`) of Google Geotargets
+  that contains only locations located in Germany and Spain.
+* Based on the Jaro-Winkler Distance between the input query and the location name
+
+### Google ProductsServices
+
+* Uses a local RDF dump (`productsservices.ttl`) that contains all the Google ProductsServices
+  categories.
+* Based on the Jaro-Winkler Distance between the input query and the category label
 
 ## Running Conciliator on Your Own Computer
 

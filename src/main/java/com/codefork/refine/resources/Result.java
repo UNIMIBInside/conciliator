@@ -46,6 +46,14 @@ public class Result {
         this.match = match;
     }
 
+    public Result(String id, String name, List<NameType> nameTypes, double score, boolean match) {
+        this.id = id;
+        this.name = name;
+        this.type = nameTypes;
+        this.score = score;
+        this.match = match;
+    }
+
     public String getId() {
         return id;
     }
@@ -69,6 +77,8 @@ public class Result {
     public void setType(List<NameType> resultType) {
         this.type = resultType;
     }
+
+    public void addType(NameType nameType) { this.type.add(nameType); }
 
     public double getScore() {
         return score;
