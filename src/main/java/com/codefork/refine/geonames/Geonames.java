@@ -81,6 +81,9 @@ public class Geonames extends WebServiceDataSource {
             }
 
             if (title != null && !nameTypes.isEmpty()) {
+
+                // entities ids are stored as http://sws.geonames.org/{{id}}/
+                identifier = identifier.split("/")[3];
                 return new Result(identifier, title, nameTypes, 1, true);
             }
 
