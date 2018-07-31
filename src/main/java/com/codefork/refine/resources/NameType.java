@@ -38,8 +38,7 @@ public class NameType {
     public boolean equals(Object obj) {
         if(obj instanceof NameType) {
             NameType obj2 = (NameType) obj;
-            return obj2.getId().equals(getId())
-                    && obj2.getName().equals(getName());
+            return obj2.getId().equals(this.getId());
         }
         return false;
     }

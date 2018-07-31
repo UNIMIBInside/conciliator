@@ -166,7 +166,7 @@ public class Geonames extends WebServiceDataSource {
 
         // Remove entities of non-allowed types
         if (query.getTypeStrict() != null && query.getTypeStrict().equals("should")) {
-            NameType selectedType = new NameType(query.getNameType().getId(), query.getNameType().getId());
+            NameType selectedType = new NameType(query.getNameType().getId(), null);
             results.removeIf(obj -> !obj.getType().contains(selectedType));
         }
 
