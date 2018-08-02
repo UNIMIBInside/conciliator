@@ -13,11 +13,11 @@ public class GeonamesMetaDataResponse extends ServiceMetaDataResponse {
 
     private final static String IDENTIFIER_SPACE = "http://sws.geonames.org/";
     private final static View VIEW = new View("http://sws.geonames.org/{{id}}");
-    private final static String SCHEMA_SPACE = "http://rdf.freebase.com/ns/type.object.id";
+    private final static String SCHEMA_SPACE = "http://www.geonames.org/ontology#";
     private final static List<NameType> DEFAULT_TYPES = new ArrayList<>();
 
     static {
-        DEFAULT_TYPES.add(new NameType("http://www.geonames.org/ontology#Feature", "Feature"));
+        DEFAULT_TYPES.add(new NameType("Feature", "Feature"));
     }
 
     public GeonamesMetaDataResponse(String baseServiceName) {

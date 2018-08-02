@@ -75,7 +75,8 @@ public class Geonames extends WebServiceDataSource {
 
                 ArrayList<String> featureCodes = (ArrayList<String>)doc.getAttribute("featureCodes");
                 for (String featureCode : featureCodes) {
-                    nameTypes.add(new NameType(featureCode, featureCode.substring(featureCode.lastIndexOf('#') + 1)));
+                    String featureCodeId = featureCode.substring(featureCode.lastIndexOf('#') + 1);
+                    nameTypes.add(new NameType(featureCodeId, featureCodeId));
                 }
 
             }
