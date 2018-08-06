@@ -20,7 +20,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 
 @Component("geonames")
 public class Geonames extends WebServiceDataSource {
@@ -56,7 +59,7 @@ public class Geonames extends WebServiceDataSource {
             String title = null;
             List<NameType> nameTypes = new ArrayList<>();
 
-            final String aqlQuery = "FOR feature IN `geonames-es`\n" +
+            final String aqlQuery = "FOR feature IN `geonames-de`\n" +
                     "    FILTER feature.`@id` == @identifier\n" +
                     "    return {\n" +
                     "    \"id\": feature.`@id`,\n" +
@@ -110,21 +113,41 @@ public class Geonames extends WebServiceDataSource {
 
         List<Result> results = new ArrayList<>();
 
-        String queryText = query.getQuery();
+        String queryText = query.getQuery().replaceAll("-", " "); // remove dashes (ARANGO escapes them while indexing)
         // Split camel case strings
-        queryText = String.join(" ", queryText.split("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])"));
+//        queryText = String.join(" ", queryText.split("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])"));
 
         // execute AQL queries
         try {
-            final String aqlQuery = "for feature in `geonames-es`\n" +
+
+            // Try to find candidates by executing a fulltext query
+            final String aqlFulltextQuery = "for feature in FULLTEXT(`geonames-de`, \"allNames\", @queryText)\n" +
                     "return {\n" +
-                    "    \"id\": feature.`@id`,\n" +
-                    "    \"names\": APPEND(feature.`http://www.geonames.org/ontology#name`[*].`@value`, " +
-                    "                      feature.`http://www.geonames.org/ontology#alternateName`[*].`@value`, " +
-                    "                      true)\n" +
-                    "}";
-            final ArangoCursor<BaseDocument> cursor = arangoDB.db(dbName).query(aqlQuery, null, null,
+                    "    \"id\": feature.`@id`, \n" +
+                    "    \"names\": feature.allNames\n" +
+                    "    }";
+            Map<String, Object> bindVars = new MapBuilder().put("queryText", queryText).get();
+            ArangoCursor<BaseDocument> cursor = arangoDB.db(dbName).query(aqlFulltextQuery, bindVars, null,
                     BaseDocument.class);
+
+            // In case of no results, try searching terms by using OR op
+            if (!cursor.hasNext()) {
+                queryText = queryText.replaceAll(" ", ",|");
+                bindVars.put("queryText", queryText);
+                cursor = arangoDB.db(dbName).query(aqlFulltextQuery, bindVars, null,
+                        BaseDocument.class);
+            }
+
+            // In case of empty results, get all the features available in Geonames
+//            if (!cursor.hasNext()) {
+//                final String aqlQuery = "for feature in `geonames-de`\n" +
+//                        "return {\n" +
+//                        "    \"id\": feature.`@id`,\n" +
+//                        "    \"names\": feature.allNames\n" +
+//                        "}";
+//                cursor = arangoDB.db(dbName).query(aqlQuery, null, null,
+//                        BaseDocument.class);
+//            }
 
             SimilarityScore<Double> jw = new JaroWinklerDistance();
 
