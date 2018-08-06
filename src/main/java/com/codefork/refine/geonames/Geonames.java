@@ -6,13 +6,12 @@ import com.arangodb.ArangoDBException;
 import com.arangodb.entity.BaseDocument;
 import com.arangodb.util.MapBuilder;
 import com.codefork.refine.Config;
+import com.codefork.refine.PropertyValueIdAndSettings;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
 import com.codefork.refine.datasource.WebServiceDataSource;
-import com.codefork.refine.resources.NameType;
-import com.codefork.refine.resources.Result;
-import com.codefork.refine.resources.ServiceMetaDataResponse;
+import com.codefork.refine.resources.*;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.commons.text.similarity.SimilarityScore;
@@ -206,4 +205,51 @@ public class Geonames extends WebServiceDataSource {
 
         return results;
     }
+
+    @Override
+    public CellList extend(String id, List<PropertyValueIdAndSettings> idsAndSettings) {
+        CellList<String> cl = new CellList<>();
+
+        String geonamesId = "http://sws.geonames.org/" + id + "/";
+        BaseDocument doc = null;
+        try {
+            final String aqlQuery = "for feature in `geonames-de`\n" +
+                    "FILTER feature.`@id` == @geonamesId\n" +
+                    "return feature";
+            Map<String, Object> bindVars = new MapBuilder().put("geonamesId", geonamesId).get();
+            ArangoCursor<BaseDocument> cursor = arangoDB.db(dbName).query(aqlQuery, bindVars, null,
+                    BaseDocument.class);
+
+            if (cursor.hasNext()) {
+                doc = cursor.next();
+            }
+        } catch (final ArangoDBException e) {
+            System.err.println("Failed to execute query. " + e.getMessage());
+        }
+
+        if (doc != null) {
+            for (PropertyValueIdAndSettings pv: idsAndSettings) {
+
+                if (doc.getProperties().containsKey("http://www.geonames.org/ontology#" + pv.getId())) {
+
+                    cl.put(pv.getId(), new ArrayList<>());
+
+                    ArrayList<Map<String, Object>> propertyObjects = (ArrayList<Map<String, Object>>)
+                            doc.getAttribute("http://www.geonames.org/ontology#" + pv.getId());
+
+                    for (Map<String, Object> objects: propertyObjects) {
+                        if (objects.containsKey("@id")) {
+                            String objectId = objects.get("@id").toString();
+                            Result result = this.getResultFromIdentifier(objectId);
+                            if (result != null) {
+                                cl.get(pv.getId()).add(new Cell(result.getId(), result.getName()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return cl;
+    }
+    
 }
