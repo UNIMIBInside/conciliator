@@ -204,14 +204,9 @@ public abstract class DataSource {
             rows.put(id, extend(id, query.getProperties()));
         }
 
-        // TODO: move column metadata generation into separate method
         List<ColumnMetaData> meta = new ArrayList<>();
         for(PropertyValueIdAndSettings prop : query.getProperties()) {
-            ColumnMetaData col = new ColumnMetaData();
-            col.setId(prop.getId());
-            col.setName("isbn");
-            col.setType(new NameType("isbn", "isbn"));
-            meta.add(col);
+            meta.add(columnMetaData(prop));
         }
 
         ExtensionResponse<String> response = new ExtensionResponse<>();
@@ -221,6 +216,18 @@ public abstract class DataSource {
         log.debug(String.format("response=%s", new DeferredJSON(response)));
 
         return response;
+    }
+
+    /**
+     * Subclasses should override and implement.
+     * @param idsAndSettings list of property IDs and their settings, to be fetched
+     * @return metadata for the passed-in properties
+     * @throws ServiceNotImplementedException
+     */
+    public ColumnMetaData columnMetaData(PropertyValueIdAndSettings idsAndSettings) throws ServiceNotImplementedException {
+        throw new ServiceNotImplementedException(
+                String.format("extend service not implemented for %s data source",
+                        getName()));
     }
 
     /**
