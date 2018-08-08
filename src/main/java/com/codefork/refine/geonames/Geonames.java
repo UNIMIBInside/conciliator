@@ -35,8 +35,6 @@ public class Geonames extends WebServiceDataSource {
     private final String dbName = getConfigProperties().getProperty(PROP_ARANGO_DBNAME);
     private ArangoDB arangoDB;
 
-    private final double threshold = 0.9;
-
     @Autowired
     public Geonames(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
@@ -55,39 +53,34 @@ public class Geonames extends WebServiceDataSource {
     private Result getResultFromIdentifier(String identifier) {
 
         try {
-            String title = null;
-            List<NameType> nameTypes = new ArrayList<>();
-
             final String aqlQuery = "FOR feature IN `geonames-de`\n" +
                     "    FILTER feature.`@id` == @identifier\n" +
                     "    return {\n" +
                     "    \"id\": feature.`@id`,\n" +
-                    "    \"names\": feature.`http://www.geonames.org/ontology#name`[*].`@value`,\n" +
-                    "    \"featureCodes\": feature.`http://www.geonames.org/ontology#featureCode`[*].`@id`\n" +
+                    "    \"name\": feature.`http://www.geonames.org/ontology#name`[0].`@value`,\n" +
+                    "    \"featureClass\": feature.`http://www.geonames.org/ontology#featureClass`[0].`@id`,\n" +
+                    "    \"featureCode\": feature.`http://www.geonames.org/ontology#featureCode`[0].`@id`\n" +
                     "}";
             final Map<String, Object> bindVars = new MapBuilder().put("identifier", identifier).get();
             final ArangoCursor<BaseDocument> cursor = this.arangoDB.db(dbName).query(aqlQuery, bindVars, null,
                     BaseDocument.class);
 
-            for (; cursor.hasNext();) {
+            if (cursor.hasNext()) {
                 BaseDocument doc = cursor.next();
+                String title = doc.getAttribute("name").toString();
 
-                List<String> names = (ArrayList<String>)doc.getAttribute("names");
-                title = names.get(0);
-
-                ArrayList<String> featureCodes = (ArrayList<String>)doc.getAttribute("featureCodes");
-                for (String featureCode : featureCodes) {
-                    String featureCodeId = featureCode.substring(featureCode.lastIndexOf('#') + 1);
-                    nameTypes.add(new NameType(featureCodeId, featureCodeId));
+                String featureCode;
+                if (doc.getAttribute("featureCode") != null) {
+                    featureCode = doc.getAttribute("featureCode").toString();
+                } else {
+                    featureCode = doc.getAttribute("featureClass").toString();
                 }
-
-            }
-
-            if (title != null && !nameTypes.isEmpty()) {
+                String featureCodeId = featureCode.substring(featureCode.lastIndexOf('#') + 1);
+                NameType nameType = new NameType(featureCodeId, featureCodeId);
 
                 // entities ids are stored as http://sws.geonames.org/{{id}}/
                 identifier = identifier.split("/")[3];
-                return new Result(identifier, title, nameTypes, 1, true);
+                return new Result(identifier, title, nameType, 1, true);
             }
 
         } catch (final ArangoDBException e) {
@@ -123,6 +116,9 @@ public class Geonames extends WebServiceDataSource {
             final String aqlFulltextQuery = "for feature in FULLTEXT(`geonames-de`, \"allNames\", @queryText)\n" +
                     "return {\n" +
                     "    \"id\": feature.`@id`, \n" +
+                    "    \"name\": feature.`http://www.geonames.org/ontology#name`[0].`@value`,\n" +
+                    "    \"featureCode\": feature.`http://www.geonames.org/ontology#featureCode`[0].`@id`,\n" +
+                    "    \"featureClass\": feature.`http://www.geonames.org/ontology#featureClass`[0].`@id`,\n" +
                     "    \"names\": feature.allNames\n" +
                     "    }";
             Map<String, Object> bindVars = new MapBuilder().put("queryText", queryText).get();
@@ -152,22 +148,34 @@ public class Geonames extends WebServiceDataSource {
 
             for (; cursor.hasNext();) {
                 BaseDocument doc = cursor.next();
-                String identifier = (String)doc.getAttribute("id");
+                // Result ID - geonames entities ids are stored as http://sws.geonames.org/{{id}}/
+                String identifier = doc.getAttribute("id").toString().split("/")[3];
+                //Result Title
+                String title = doc.getAttribute("name").toString();
+
+                // Result nametype
+                // Feature code is missing for some entities (e.g., http://sws.geonames.org/6324466/)
+                String featureCode;
+                if (doc.getAttribute("featureCode") != null) {
+                    featureCode = doc.getAttribute("featureCode").toString();
+                } else {
+                    featureCode = doc.getAttribute("featureClass").toString();
+                }
+                String featureCodeId = featureCode.substring(featureCode.lastIndexOf('#') + 1);
+                NameType nameType = new NameType(featureCodeId, featureCodeId);
+
+                // Result score (the label with the highest similarity)
                 List<String> names = (ArrayList<String>)doc.getProperties().get("names");
+                double maxScore = .0;
 
                 for (String name : names) {
                     double similarity = jw.apply(queryText, name);
-
-                    if (similarity > threshold) {
-                        Result res = this.getResultFromIdentifier(identifier);
-                        if (res != null) {
-                            res.setScore(similarity);
-                            res.setMatch(false);
-                            results.add(res);
-                        }
-                        break;
+                    if (similarity > maxScore) {
+                        maxScore = similarity;
                     }
                 }
+
+                results.add(new Result(identifier, title, nameType, maxScore, false));
             }
         } catch (final ArangoDBException e) {
             System.err.println("Failed to execute query. " + e.getMessage());
@@ -198,8 +206,7 @@ public class Geonames extends WebServiceDataSource {
 
         // Match if the first result score is equal to 1.0 or
         // if there is only one result with a score greater than the threshold
-        if (results.size() > 0 && results.get(0).getScore() == 1.0 ||
-                results.size() == 1 && results.get(0).getScore() > threshold) {
+        if (results.size() > 0 && results.get(0).getScore() == 1.0) {
             results.get(0).setMatch(true);
         }
 
