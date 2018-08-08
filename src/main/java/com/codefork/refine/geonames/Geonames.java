@@ -258,5 +258,36 @@ public class Geonames extends WebServiceDataSource {
         }
         return cl;
     }
-    
+
+    @Override
+    public ColumnMetaData columnMetaData(PropertyValueIdAndSettings prop) {
+        // TODO: replace this query with a request to ABSTAT!
+        try {
+            final String aqlQuery = "let objects = (for feature in `geonames-de` return feature.@prop[0].`@id`)\n" +
+                    "for feature in `geonames-de`\n" +
+                    "    filter feature.`@id` in objects\n" +
+                    "    COLLECT propGroup = feature.`http://www.geonames.org/ontology#featureCode`[0].`@id` WITH COUNT INTO numProps\n" +
+                    "    sort propGroup DESC\n" +
+                    "    return {propGroup, numProps}";
+            getLog().debug(prop.getId());
+            Map<String, Object> bindVars = new MapBuilder().put("prop", "http://www.geonames.org/ontology#" + prop.getId()).get();
+            ArangoCursor<BaseDocument> cursor = arangoDB.db(dbName).query(aqlQuery, bindVars, null,
+                    BaseDocument.class);
+
+            if (cursor.hasNext()) {
+                BaseDocument doc = cursor.next();
+                String bestType = doc.getAttribute("propGroup").toString();
+                ColumnMetaData col = new ColumnMetaData();
+                col.setId(prop.getId());
+                col.setName(prop.getId());
+                col.setType(new NameType(bestType.replaceAll("http://www.geonames.org/ontology#", ""),
+                        bestType.replaceAll("http://www.geonames.org/ontology#", "")));
+                return col;
+            }
+        } catch (final ArangoDBException e) {
+            System.err.println("Failed to execute query. " + e.getMessage());
+        }
+
+        return null;
+    }
 }
