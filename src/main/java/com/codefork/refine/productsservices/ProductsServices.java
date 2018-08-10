@@ -43,7 +43,7 @@ public class ProductsServices extends WebServiceDataSource {
 
     @Override
     public String getName() {
-        return "Google Categories";
+        return "Google ProductsServices Categories";
     }
 
     private Result getResultFromIdentifier(String identifier) {

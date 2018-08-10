@@ -36,6 +36,11 @@ public class Wikifier extends WebServiceDataSource {
         return new WikifierMetaDataResponse(getName());
     }
 
+    @Override
+    public String getName() {
+        return "Wikifier For Tables";
+    }
+
     private String createQuery(SearchQuery query) {
         Properties props = getConfig().getProperties();
         String userKey = null;

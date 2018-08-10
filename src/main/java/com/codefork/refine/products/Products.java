@@ -40,6 +40,11 @@ public class Products extends WebServiceDataSource {
     }
 
     @Override
+    public String getName() {
+        return "GFK Product";
+    }
+
+    @Override
     public List<Result> search(SearchQuery query) {
 
         List<Result> results = new ArrayList<>();

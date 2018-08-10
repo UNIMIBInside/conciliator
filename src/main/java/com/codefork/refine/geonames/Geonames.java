@@ -50,6 +50,11 @@ public class Geonames extends WebServiceDataSource {
         return new GeonamesMetaDataResponse(getName());
     }
 
+    @Override
+    public String getName() {
+        return "GeoNames";
+    }
+
     private Result getResultFromIdentifier(String identifier) {
 
         try {

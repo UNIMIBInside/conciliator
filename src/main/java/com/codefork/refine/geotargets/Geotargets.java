@@ -42,7 +42,7 @@ public class Geotargets extends WebServiceDataSource {
 
     @Override
     public String getName() {
-        return "Google Geotargets";
+        return "Google GeoTargets";
     }
 
     private Result getResultFromIdentifier(String identifier) {
