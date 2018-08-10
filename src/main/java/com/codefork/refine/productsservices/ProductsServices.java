@@ -41,6 +41,11 @@ public class ProductsServices extends WebServiceDataSource {
         return new ProductsServicesMetaDataResponse(getName());
     }
 
+    @Override
+    public String getName() {
+        return "Google Categories";
+    }
+
     private Result getResultFromIdentifier(String identifier) {
         String queryString = String.format("SELECT * WHERE { <%s> ?p ?o . }", identifier);
 

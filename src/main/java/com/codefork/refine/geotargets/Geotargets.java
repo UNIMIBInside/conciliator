@@ -40,6 +40,11 @@ public class Geotargets extends WebServiceDataSource {
         return new GeotargetsMetaDataResponse(getName());
     }
 
+    @Override
+    public String getName() {
+        return "Google Geotargets";
+    }
+
     private Result getResultFromIdentifier(String identifier) {
         String queryString = String.format(
                 "SELECT * WHERE { <http://inside.disco.unimib.it/ontology/geo/%s> ?p ?o . }",
