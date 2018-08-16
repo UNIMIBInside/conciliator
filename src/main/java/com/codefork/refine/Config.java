@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Properties;
 
 /**
@@ -19,7 +20,7 @@ public class Config {
     public static final String PROP_CACHE_TTL = "cache.ttl";
     public static final String PROP_CACHE_SIZE = "cache.size";
 
-    private static final String CONFIG_FILENAME = "conciliator.properties";
+    private static final String CONFIG_FILENAME = "configuration/conciliator.properties";
 
     private Log log = LogFactory.getLog(Config.class);
     private Properties properties = new Properties();
@@ -33,6 +34,9 @@ public class Config {
         properties.put("datasource.orcidsmartnames.name", "ORCID - Smart Names Mode");
         properties.put("datasource.openlibrary.name", "OpenLibrary");
         loadFromFile();
+        PrintWriter writer = new PrintWriter(System.out);
+        properties.list(writer);
+        writer.flush();
     }
 
     public void loadFromFile() {
@@ -51,6 +55,8 @@ public class Config {
     public void merge(Properties properties) {
         this.properties.putAll(properties);
     }
+
+
 
     public Properties getProperties() {
         return properties;
