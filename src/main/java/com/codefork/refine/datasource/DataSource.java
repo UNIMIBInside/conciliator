@@ -1,17 +1,7 @@
 package com.codefork.refine.datasource;
 
-import com.codefork.refine.Config;
-import com.codefork.refine.ExtensionQuery;
-import com.codefork.refine.PropertyValueIdAndSettings;
-import com.codefork.refine.SearchQuery;
-import com.codefork.refine.SearchQueryFactory;
-import com.codefork.refine.resources.CellList;
-import com.codefork.refine.resources.ColumnMetaData;
-import com.codefork.refine.resources.ExtensionResponse;
-import com.codefork.refine.resources.NameType;
-import com.codefork.refine.resources.ProposePropertiesResponse;
-import com.codefork.refine.resources.SearchResponse;
-import com.codefork.refine.resources.ServiceMetaDataResponse;
+import com.codefork.refine.*;
+import com.codefork.refine.resources.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,12 +15,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import javax.annotation.PreDestroy;
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
+import java.util.*;
 
 /**
  * A super-generic reconciliation data source.
@@ -45,7 +30,7 @@ public abstract class DataSource {
     // key to use for config file properties (datasource.{configName})
     private String configName = this.getClass().getSimpleName().toLowerCase();
 
-    private Config config;
+    private ApplicationConfig applicationConfig;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -62,14 +47,8 @@ public abstract class DataSource {
     };
 
     @Autowired
-    public DataSource(Config config) {
-        setConfig(config);
-
-        Properties props = getConfigProperties();
-
-        if(props.containsKey("name")) {
-            setName(props.getProperty("name"));
-        }
+    public DataSource(ApplicationConfig config) {
+        setApplicationConfig(config);
     }
 
     @PreDestroy
@@ -86,20 +65,12 @@ public abstract class DataSource {
         return log;
     }
 
-    public Config getConfig() {
-        return config;
+    public ApplicationConfig getApplicationConfig() {
+        return applicationConfig;
     }
 
-    public void setConfig(Config config) {
-        this.config = config;
-    }
-
-    /**
-     * @return Properties object containing keys relevant to this
-     * datasource, with "datasource.name" prefix stripped away.
-     */
-    public Properties getConfigProperties() {
-        return getConfig().getDataSourceProperties(getConfigName());
+    public void setApplicationConfig(ApplicationConfig applicationConfig) {
+        this.applicationConfig = applicationConfig;
     }
 
     public String getName() {

@@ -1,6 +1,6 @@
 package com.codefork.refine.productsservices;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
@@ -8,7 +8,6 @@ import com.codefork.refine.datasource.WebServiceDataSource;
 import com.codefork.refine.resources.NameType;
 import com.codefork.refine.resources.Result;
 import com.codefork.refine.resources.ServiceMetaDataResponse;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.similarity.JaroWinklerDistance;
 import org.apache.commons.text.similarity.SimilarityScore;
 import org.apache.jena.query.*;
@@ -31,7 +30,7 @@ public class ProductsServices extends WebServiceDataSource {
     private final double alpha = 0.5;
 
     @Autowired
-    public ProductsServices(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public ProductsServices(ApplicationConfig config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
         RDFDataMgr.read(this.model, "productsservices.ttl"); // TODO should be a SPARQL endpoint
     }

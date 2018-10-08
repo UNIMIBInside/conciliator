@@ -1,6 +1,6 @@
 package com.codefork.refine.viaf;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.SearchQueryFactory;
 import com.codefork.refine.ThreadPool;
@@ -47,7 +47,7 @@ public class VIAF extends WebServiceDataSource {
     private Map<String, NonVIAFSource> nonViafSources = new HashMap<>();
 
     @Autowired
-    public VIAF(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public VIAF(ApplicationConfig config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
 
         setCacheEnabled(true);

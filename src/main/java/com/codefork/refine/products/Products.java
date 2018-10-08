@@ -1,6 +1,6 @@
 package com.codefork.refine.products;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
@@ -26,12 +26,10 @@ public class Products extends WebServiceDataSource {
     private final double threshold = 0.5;
     private String sparqlService;
 
-    private static final String PROP_SPARQL_ENDPOINT = "sparqlEndpoint";
-
     @Autowired
-    public Products(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public Products(ApplicationConfig config, ProductsConfig productsConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
-        this.sparqlService = getConfigProperties().getProperty(PROP_SPARQL_ENDPOINT);
+        this.sparqlService = productsConfig.getSparqlEndpoint();
     }
 
     @Override

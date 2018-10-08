@@ -1,6 +1,6 @@
 package com.codefork.refine.geotargets;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
@@ -30,7 +30,7 @@ public class Geotargets extends WebServiceDataSource {
     private final double threshold = 0.9;
 
     @Autowired
-    public Geotargets(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public Geotargets(ApplicationConfig config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
         RDFDataMgr.read(this.model, "AdWords_API_Location_Criteria_DE_ES.ttl"); // TODO should be a SPARQL endpoint
     }

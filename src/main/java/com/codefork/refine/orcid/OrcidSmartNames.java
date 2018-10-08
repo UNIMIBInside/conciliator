@@ -1,6 +1,6 @@
 package com.codefork.refine.orcid;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.SearchQueryFactory;
 import com.codefork.refine.ThreadPoolFactory;
@@ -23,8 +23,13 @@ public class OrcidSmartNames extends OrcidBase {
             new SmartNamesModeSearchQueryFactory();
 
     @Autowired
-    public OrcidSmartNames(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public OrcidSmartNames(ApplicationConfig config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
+    }
+
+    @Override
+    public String getName() {
+        return "ORCID - Smart Names Mode";
     }
 
     @Override

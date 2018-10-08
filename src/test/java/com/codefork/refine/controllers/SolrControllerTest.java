@@ -1,8 +1,9 @@
 package com.codefork.refine.controllers;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.datasource.ConnectionFactory;
 import com.codefork.refine.datasource.SimulatedConnectionFactory;
+import com.codefork.refine.solr.SolrConfig;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.Test;
@@ -34,19 +35,13 @@ public class SolrControllerTest {
         }
         // we can't use MockBean b/c the PostConstruct hook in VIAF uses config
         // before we get a chance to put matchers on it in this test code.
-        @Bean
-        public Config config() {
-            Properties props = new Properties();
-            props.setProperty("datasource.solr.nametype.id", "/book/book");
-            props.setProperty("datasource.solr.nametype.name", "Book");
-            props.setProperty("datasource.solr.url.query", "http://localhost:8983/solr/test-core/select?wt=xml&q={{QUERY}}&rows={{ROWS}}");
-            props.setProperty("datasource.solr.url.document", "http://localhost:8983/solr/test-core/get?id={{id}}");
-            props.setProperty("datasource.solr.field.id", "id");
-            props.setProperty("datasource.solr.field.name", "title_display");
 
-            Config config = new Config();
-            config.merge(props);
-            return config;
+        @Autowired
+        ApplicationConfig applicationConfig;
+
+        @Bean
+        public ApplicationConfig config() {
+            return applicationConfig;
         }
     }
 

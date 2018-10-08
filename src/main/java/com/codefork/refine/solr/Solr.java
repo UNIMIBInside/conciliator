@@ -1,6 +1,6 @@
 package com.codefork.refine.solr;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
@@ -28,31 +28,24 @@ import java.util.List;
 @Component("solr")
 public class Solr extends WebServiceDataSource {
 
-    public static final String PROP_URL_DOCUMENT = "url.document";
-    public static final String PROP_URL_QUERY = "url.query";
-    public static final String PROP_FIELD_ID = "field.id";
-    public static final String PROP_FIELD_NAME = "field.name";
-    public static final String PROP_FIELD_NAME_MULTIVALUE_STRATEGY = "field.name.multivalue.strategy";
-    public static final String PROP_FIELD_NAME_MULTIVALUE_DELIMITER = "field.name.multivalue.delimiter";
-    public static final String PROP_NAMETYPE_ID = "nametype.id";
-    public static final String PROP_NAMETYPE_NAME = "nametype.name";
-
+    private SolrConfig solrConfig;
     Log log = LogFactory.getLog(Solr.class);
 
     private SAXParserFactory spf = SAXParserFactory.newInstance();
 
     @Autowired
-    public Solr(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public Solr(ApplicationConfig config, SolrConfig solrConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
+        this.solrConfig = solrConfig;
     }
 
     @Override
     public ServiceMetaDataResponse createServiceMetaDataResponse(String baseUrl) {
-        return new SolrMetaDataResponse(getName(), getConfigProperties().getProperty(PROP_URL_DOCUMENT));
+        return new SolrMetaDataResponse(getName(), this.solrConfig.getUrl().getDocument());
     }
 
     public String createURL(SearchQuery query) throws Exception {
-        String urlTemplate = getConfigProperties().getProperty(PROP_URL_QUERY);
+        String urlTemplate = this.solrConfig.getUrl().getQuery();
         return urlTemplate.replace("{{QUERY}}", UriUtils.encodeQueryParam(query.getQuery(), "UTF-8"))
                 .replace("{{ROWS}}", String.valueOf(query.getLimit()));
     }
@@ -64,22 +57,21 @@ public class Solr extends WebServiceDataSource {
         HttpURLConnection conn = getConnectionFactory().createConnection(url);
 
         InputStream response = conn.getInputStream();
-
         MultiValueFieldStrategy multiValueFieldStrategy = MultiValueFieldStrategy.CONCAT;
-        if(MultiValueFieldStrategy.CONCAT.toString().toLowerCase().equals(getConfigProperties().getProperty(PROP_FIELD_NAME_MULTIVALUE_STRATEGY))) {
+        if(MultiValueFieldStrategy.CONCAT.toString().toLowerCase().equals(this.solrConfig.getField().getMultiValue().getStrategy())) {
             multiValueFieldStrategy = MultiValueFieldStrategy.CONCAT;
-        } else if(MultiValueFieldStrategy.FIRST.toString().toLowerCase().equals(getConfigProperties().getProperty(PROP_FIELD_NAME_MULTIVALUE_STRATEGY))) {
+        } else if(MultiValueFieldStrategy.FIRST.toString().toLowerCase().equals(this.solrConfig.getField().getMultiValue().getStrategy())) {
             multiValueFieldStrategy = MultiValueFieldStrategy.FIRST;
         }
 
         SAXParser parser = spf.newSAXParser();
         SolrParser solrParser = new SolrParser(
-                getConfigProperties().getProperty(PROP_FIELD_ID),
-                getConfigProperties().getProperty(PROP_FIELD_NAME),
+                this.solrConfig.getField().getId(),
+                this.solrConfig.getField().getName(),
                 multiValueFieldStrategy,
-                getConfigProperties().getProperty(PROP_FIELD_NAME_MULTIVALUE_DELIMITER, ", "),
-                new NameType(getConfigProperties().getProperty(PROP_NAMETYPE_ID),
-                        getConfigProperties().getProperty(PROP_NAMETYPE_NAME)));
+                this.solrConfig.getField().getMultiValue().getDelimiter(),
+                new NameType(this.solrConfig.getNameType().getId(), this.solrConfig.getNameType().getName())
+        );
 
         long start = System.currentTimeMillis();
         parser.parse(response, solrParser);

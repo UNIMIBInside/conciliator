@@ -1,6 +1,6 @@
 package com.codefork.refine.wikifier;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
@@ -25,10 +25,12 @@ import java.util.Properties;
 public class Wikifier extends WebServiceDataSource {
 
     private final ObjectMapper mapper = new ObjectMapper();
+    private String apiToken;
 
     @Autowired
-    public Wikifier(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public Wikifier(ApplicationConfig config, WikifierConfig wikifierConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
+        this.apiToken = wikifierConfig.getApiToken();
     }
 
     @Override
@@ -42,15 +44,6 @@ public class Wikifier extends WebServiceDataSource {
     }
 
     private String createQuery(SearchQuery query) {
-        Properties props = getConfig().getProperties();
-        String userKey = null;
-        if (props.containsKey("wikifier.key")) {
-            userKey = props.getProperty("wikifier.key");
-        }
-        if (userKey == null) {
-            return null;
-        }
-
         String text = query.getQuery();
         // Split camel case strings
         text = String.join(" ", text.split("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])"));
@@ -61,7 +54,7 @@ public class Wikifier extends WebServiceDataSource {
                 "&maxMentionEntropy=3" +
                 "&minLinkFrequency=2",
                 text,
-                userKey);
+                this.apiToken);
     }
 
     @Override

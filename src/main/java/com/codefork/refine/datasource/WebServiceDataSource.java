@@ -1,12 +1,6 @@
 package com.codefork.refine.datasource;
 
-import com.codefork.refine.Application;
-import com.codefork.refine.Config;
-import com.codefork.refine.SearchQuery;
-import com.codefork.refine.SearchResult;
-import com.codefork.refine.StringUtil;
-import com.codefork.refine.ThreadPool;
-import com.codefork.refine.ThreadPoolFactory;
+import com.codefork.refine.*;
 import com.codefork.refine.resources.Result;
 import com.codefork.refine.resources.SearchResponse;
 import org.springframework.cache.Cache;
@@ -16,7 +10,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -39,21 +32,17 @@ public abstract class WebServiceDataSource extends DataSource {
     private ConnectionFactory connectionFactory;
 
     public WebServiceDataSource(
-            Config config,
+            ApplicationConfig applicationConfig,
             CacheManager cacheManager,
             ThreadPoolFactory threadPoolFactory,
             ConnectionFactory connectionFactory) {
-        super(config);
+        super(applicationConfig);
         this.cacheManager = cacheManager;
         this.threadPoolFactory = threadPoolFactory;
         this.connectionFactory = connectionFactory;
 
         this.threadPool = createThreadPool();
-
-        Properties props = getConfig().getProperties();
-        if(props.containsKey(Config.PROP_CACHE_ENABLED)) {
-            setCacheEnabled(Boolean.valueOf(props.getProperty(Config.PROP_CACHE_ENABLED)));
-        }
+        setCacheEnabled(applicationConfig.getCache().isEnabled());
    }
 
     public boolean isCacheEnabled() {
@@ -83,7 +72,6 @@ public abstract class WebServiceDataSource extends DataSource {
     public ThreadPool getThreadPool() {
         return threadPool;
     }
-
 
     public ConnectionFactory getConnectionFactory() {
         return connectionFactory;

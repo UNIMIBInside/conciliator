@@ -5,7 +5,7 @@ import com.arangodb.ArangoDB;
 import com.arangodb.ArangoDBException;
 import com.arangodb.entity.BaseDocument;
 import com.arangodb.util.MapBuilder;
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.PropertyValueIdAndSettings;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
@@ -27,22 +27,19 @@ import java.util.Map;
 @Component("geonames")
 public class Geonames extends WebServiceDataSource {
 
-    private static final String PROP_ARANGO_HOST = "dbhost";
-    private static final String PROP_ARANGO_PORT = "dbport";
-    private static final String PROP_ARANGO_DBNAME = "dbname";
-    private static final String PROP_ARANGO_USER = "dbuser";
-
-    private final String dbName = getConfigProperties().getProperty(PROP_ARANGO_DBNAME);
+    private String dbName;
     private ArangoDB arangoDB;
 
     @Autowired
-    public Geonames(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public Geonames(ApplicationConfig config, GeonamesConfig geonamesConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
 
-        String arangoHost = getConfigProperties().getProperty(PROP_ARANGO_HOST);
-        int arangoPort = Integer.parseInt(getConfigProperties().getProperty(PROP_ARANGO_PORT));
-        String dbUser = getConfigProperties().getProperty(PROP_ARANGO_USER);
-        this.arangoDB = new ArangoDB.Builder().host(arangoHost, arangoPort).user(dbUser).build();
+        String arangoHost = geonamesConfig.getHost();
+        int arangoPort = geonamesConfig.getPort();
+        String dbUser = geonamesConfig.getUsername();
+        String dbPwd = geonamesConfig.getPassword();
+        this.arangoDB = new ArangoDB.Builder().host(arangoHost, arangoPort).user(dbUser).password(dbPwd).build();
+        this.dbName = geonamesConfig.getDbName();
     }
 
     @Override

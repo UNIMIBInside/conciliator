@@ -1,6 +1,6 @@
 package com.codefork.refine.solr;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,12 +23,7 @@ import org.springframework.stereotype.Component;
 public class AnotherSolr extends Solr {
 
     @Autowired
-    public AnotherSolr(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
-        super(config, cacheManager, threadPoolFactory, connectionFactory);
-    }
-
-    @Override
-    public String getConfigName() {
-        return "anothersolr";
+    public AnotherSolr(ApplicationConfig applicationConfig, AnotherSolrConfig anotherSolrConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+        super(applicationConfig, anotherSolrConfig, cacheManager, threadPoolFactory, connectionFactory);
     }
 }

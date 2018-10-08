@@ -1,12 +1,13 @@
 package com.codefork.refine.controllers;
 
 import com.codefork.refine.Application;
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.datasource.ConnectionFactory;
 import com.codefork.refine.datasource.SimulatedConnectionFactory;
 import com.codefork.refine.viaf.VIAF;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.jena.base.Sys;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -40,14 +41,13 @@ public class VIAFControllerTest {
             return new SimulatedConnectionFactory();
         }
 
-        @Bean
-        public Config config() {
-            Properties props = new Properties();
-            props.setProperty(Config.PROP_CACHE_TTL, String.valueOf(TTL_SECONDS));
+        @Autowired
+        ApplicationConfig applicationConfig;
 
-            Config config = new Config();
-            config.merge(props);
-            return config;
+        @Bean
+        public ApplicationConfig config() {
+            applicationConfig.getCache().setTtl(TTL_SECONDS);
+            return applicationConfig;
         }
     }
 

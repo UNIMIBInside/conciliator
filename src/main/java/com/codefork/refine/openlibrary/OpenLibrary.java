@@ -1,6 +1,6 @@
 package com.codefork.refine.openlibrary;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.PropertyValue;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.StringUtil;
@@ -29,11 +29,16 @@ public class OpenLibrary extends WebServiceDataSource {
     private static final NameType bookType = new NameType("/book/book", "Book");
 
     @Autowired
-    public OpenLibrary(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public OpenLibrary(ApplicationConfig config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
 
         // openlibrary seems to enforce non-simultaneous queries
         getThreadPool().setPoolSize(1);
+    }
+
+    @Override
+    public String getName() {
+        return "OpenLibrary";
     }
 
     @Override
