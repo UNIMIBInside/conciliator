@@ -177,7 +177,7 @@ public class Geonames extends WebServiceDataSource {
         CellList<String> cl = new CellList<>();
 
 
-        for (PropertyValueIdAndSettings pv: idsAndSettings) {
+        for (PropertyValueIdAndSettings pv : idsAndSettings) {
             String queryString = String.format(
                     "PREFIX gn: <http://www.geonames.org/ontology#>\n" +
                             "select ?o ?name where {\n" +
@@ -191,7 +191,7 @@ public class Geonames extends WebServiceDataSource {
             ArrayList<Cell> cells = new ArrayList<>();
 
             try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName)) {
-                ResultSet sparqlResults = qexec.execSelect() ;
+                ResultSet sparqlResults = qexec.execSelect();
                 while (sparqlResults.hasNext()) {
                     QuerySolution soln = sparqlResults.nextSolution();
                     if (soln.getLiteral("name") != null) {
@@ -238,10 +238,65 @@ public class Geonames extends WebServiceDataSource {
             col.setId(prop.getId());
             col.setName(prop.getId());
             if (mostFreqType != null) {
-                String type =  mostFreqType.toString().replaceAll("http://www.geonames.org/ontology#", "");
+                String type = mostFreqType.toString().replaceAll("http://www.geonames.org/ontology#", "");
                 col.setType(new NameType(type, type));
             }
             return col;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Override
+    public ProposePropertiesResponse proposeProperties(String type, int limit) {
+
+        // TODO: replace this query with a request to ABSTAT!
+        String queryString = "PREFIX gn: <http://www.geonames.org/ontology#>\n" +
+                "select ?p\n" +
+                "where {\n" +
+                "  ?s ?p ?o.\n" +
+                "}\n" +
+                "group by ?p\n" +
+                "order by desc(count (?p))";
+
+        if (type != null) {
+            // type can be a featureCode (e.g., A.ADM1) or a featurClass (e.g., A), or null
+            String typeProperty = type.contains(".") ? "featureCode" : "featureClass";
+            queryString = String.format(
+                    "PREFIX gn: <http://www.geonames.org/ontology#>\n" +
+                            "select ?p\n" +
+                            "where {\n" +
+                            "?s ?p ?o;\n" +
+                            "gn:%s gn:%s .\n" +
+                            "}\n" +
+                            "group by ?p\n" +
+                            "order by desc(count (?p))",
+                    typeProperty, type);
+        }
+
+        Query sparqlQuery = QueryFactory.create(queryString);
+        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName)) {
+            ResultSet sparqlResults = qexec.execSelect();
+
+            List<NameType> properties = new ArrayList<>();
+            while (sparqlResults.hasNext()) {
+                QuerySolution soln = sparqlResults.nextSolution();
+                String property = soln.getResource("p").toString();
+                if (property.startsWith("http://www.geonames.org/ontology#")) {
+                    property = property.replace("http://www.geonames.org/ontology#", "");
+                    properties.add(new NameType(property, property));
+                }
+                if (limit > 0 && properties.size() == limit) {
+                    break;
+                }
+            }
+
+            ProposePropertiesResponse res = new ProposePropertiesResponse();
+            res.setProperties(properties);
+            res.setLimit(limit);
+            res.setType(type);
+            return res;
+
         } catch (Exception e) {
             return null;
         }
