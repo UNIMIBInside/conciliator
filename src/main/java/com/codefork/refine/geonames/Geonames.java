@@ -18,6 +18,7 @@ import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.client.RequestOptions;
 import org.elasticsearch.client.RestClient;
 import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.unit.DistanceUnit;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
@@ -34,6 +35,23 @@ import java.util.Map;
 
 @Component("geonames")
 public class Geonames extends WebServiceDataSource {
+
+    /**
+     * A private read-only object that represents a coordinate in the WGS 84 system.
+     */
+    private class Coordinate {
+        private double latitude;
+        private double longitude;
+
+        Coordinate(double latitude, double longitude) {
+            this.latitude = latitude;
+            this.longitude = longitude;
+        }
+
+        boolean isValid() {
+            return this.latitude <= 90 && this.latitude >= -90 && this.longitude <= 180 && this.longitude >= -180;
+        }
+    }
 
     private RestHighLevelClient client;
     private String sparqlEndpoint;
@@ -83,7 +101,7 @@ public class Geonames extends WebServiceDataSource {
      * Return the URI of the property identified by the given ID.
      * IDs which are already URI are returned as are, while other IDs
      * are transformed to GeoNames ontology properties.
-     * @param id
+     * @param id a string containing the ID
      * @return the URI of the property identified by the given ID
      */
     private String urifyPropertyId(String id) {
@@ -113,6 +131,78 @@ public class Geonames extends WebServiceDataSource {
                 new NameType(featureCode, featureCode));
     }
 
+    private List<Result> getResultsFromElasticQueryBuilder(BoolQueryBuilder qb, SearchQuery query) {
+
+        if (query.getTypeStrict() != null && query.getTypeStrict().equals("should")) {
+            // The type is given as "class.code", or only "class" if the code is not available
+            String[] typeSplit = query.getNameType().getId().split("\\.");
+            if (typeSplit.length > 0) {
+                qb.filter(QueryBuilders.termQuery("fclass", typeSplit[0]));
+            }
+            if (typeSplit.length == 2) {
+                qb.filter(QueryBuilders.termQuery("fcode", typeSplit[1]));
+            }
+        }
+
+        List<Result> results = new ArrayList<>();
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(qb);
+        sourceBuilder.size(query.getLimit());
+
+        SearchRequest searchRequest = new SearchRequest("geonames");
+        searchRequest.source(sourceBuilder);
+
+        try {
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+            SearchHits hits = searchResponse.getHits();
+
+            SearchHit[] searchHits = hits.getHits();
+            for (SearchHit hit : searchHits) {
+
+                Result r = buildResultFromSourceMap(hit.getSourceAsMap());
+                r.setScore(hit.getScore());
+                results.add(r);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return results;
+    }
+
+    /**
+     * Check if the given string could represent a GeoNames ID.
+     * Since GeoNames IDs are integers, this method only check if
+     * the given string represents a number.
+     * @param query a string
+     * @return true if the string could represent a GeoNames ID (i.e., contains a number)
+     */
+    private boolean isGeonamesId(String query) {
+        return StringUtils.isNumeric(query);
+    }
+
+    /**
+     * Create a new Coordinate by reading a string.
+     * A new Coordinate object is returned if the string matches
+     * the "lat,long" format, and the coordinate is valid in the
+     * WGS 84 system.
+     * @param s a string
+     * @return a Coordinate object
+     */
+    private Coordinate getCoordinateFromString(String s) {
+        try {
+            String[] latLongStr = s.split(",");
+            Coordinate c = new Coordinate(Double.parseDouble(latLongStr[0]), Double.parseDouble(latLongStr[1]));
+            if (c.isValid()) {
+                return c;
+            } else {
+                return null;
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private List<Result> matchingByIdentifier(SearchQuery query) {
         List<Result> results = new ArrayList<>();
 
@@ -138,54 +228,33 @@ public class Geonames extends WebServiceDataSource {
 
     private List<Result> matchingByLookup(SearchQuery query) {
 
-        List<Result> results = new ArrayList<>();
-
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
         BoolQueryBuilder boolBuilder = QueryBuilders.boolQuery()
                 .should(QueryBuilders.matchQuery("name", query.getQuery().toLowerCase()).boost(2.0f))
                 .should(QueryBuilders.matchQuery("alternatenames", query.getQuery().toLowerCase()))
                 .should(QueryBuilders.matchQuery("asciiname", query.getQuery().toLowerCase()).boost(1.5f));
-        if (query.getTypeStrict() != null && query.getTypeStrict().equals("should")) {
-            // The type is given as "class.code", or only "class" if the code is not available
-            String[] typeSplit = query.getNameType().getId().split("\\.");
-            if (typeSplit.length > 0) {
-                boolBuilder.filter(QueryBuilders.termQuery("fclass", typeSplit[0]));
-            }
-            if (typeSplit.length == 2) {
-                boolBuilder.filter(QueryBuilders.termQuery("fcode", typeSplit[1]));
-            }
-        }
-        sourceBuilder.query(boolBuilder);
-        sourceBuilder.size(query.getLimit());
 
-        SearchRequest searchRequest = new SearchRequest("geonames");
-        searchRequest.source(sourceBuilder);
+        return getResultsFromElasticQueryBuilder(boolBuilder, query);
+    }
 
-        try {
-            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
-            SearchHits hits = searchResponse.getHits();
+    private List<Result> matchingByCoordinate(SearchQuery query, Coordinate coordinate) {
 
-            SearchHit[] searchHits = hits.getHits();
-            for (SearchHit hit : searchHits) {
+        BoolQueryBuilder boolBuilder = QueryBuilders.boolQuery()
+                .must(QueryBuilders.geoDistanceQuery("location")
+                        .point(coordinate.latitude, coordinate.longitude)
+                        .distance(10, DistanceUnit.KILOMETERS));
 
-                Result r = buildResultFromSourceMap(hit.getSourceAsMap());
-                r.setScore(hit.getScore());
-                results.add(r);
-
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        return results;
+        return getResultsFromElasticQueryBuilder(boolBuilder, query);
     }
 
     @Override
     public List<Result> search(SearchQuery query) {
 
         List<Result> results;
+        Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
 
-        if (StringUtils.isNumeric(query.getQuery())) {
+        if (coordinate != null) {
+            results = this.matchingByCoordinate(query, coordinate);
+        } else if (isGeonamesId(query.getQuery())) {
             results = this.matchingByIdentifier(query);
         } else {
             results = this.matchingByLookup(query);
