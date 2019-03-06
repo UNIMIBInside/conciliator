@@ -39,6 +39,10 @@ public class Geonames extends WebServiceDataSource {
     private String sparqlEndpoint;
     private String graphName;
 
+    // RDF prefixes for GeoNames ontology and resources
+    private final String GN_ONTOLOGY_PREFIX = "http://www.geonames.org/ontology#";
+    private final String GN_RESOURCE_PREFIX = "http://sws.geonames.org/";
+
     @Autowired
     public Geonames(ApplicationConfig config, GeonamesConfig geonamesConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
@@ -65,6 +69,50 @@ public class Geonames extends WebServiceDataSource {
         return "GeoNames";
     }
 
+    /**
+     * Return the URI of the GeoNames resource identified by the given ID
+     * @param id the id of a GeoNames resource
+     * @return the URI of the resource identified by the given id
+     */
+    private String urifyGeoNamesId(String id) {
+        // URIs of resources in GeoNames end with the /
+        return String.format("%s%s/", GN_RESOURCE_PREFIX, id);
+    }
+
+    /**
+     * Return the URI of the property identified by the given ID.
+     * IDs which are already URI are returned as are, while other IDs
+     * are transformed to GeoNames ontology properties.
+     * @param id
+     * @return the URI of the property identified by the given ID
+     */
+    private String urifyPropertyId(String id) {
+        if (id.startsWith("http:")) {
+            return id;
+        }
+        return GN_ONTOLOGY_PREFIX + id;
+    }
+
+    /**
+     * Use a Source Map obtained from ElasticSearch (geonames index)
+     * to build a new Result.
+     * Result score and match are set to -1 and false, respectively.
+     * @param sourceMap a source map obtained from the "geonames" index
+     * @return a new Result with score = -1 and match = false
+     */
+    private Result buildResultFromSourceMap(Map<String, Object> sourceMap) {
+
+        // Feature code is missing for some entities (e.g., http://sws.geonames.org/6324466/)
+        String featureCode = sourceMap.get("fclass").toString();
+        if (sourceMap.get("fcode") != null) {
+            featureCode += "." + sourceMap.get("fcode").toString();
+        }
+
+        return new Result(sourceMap.get("geonameid").toString(),
+                sourceMap.get("name").toString(),
+                new NameType(featureCode, featureCode));
+    }
+
     private List<Result> matchingByIdentifier(SearchQuery query) {
         List<Result> results = new ArrayList<>();
 
@@ -72,24 +120,14 @@ public class Geonames extends WebServiceDataSource {
             GetRequest getRequest = new GetRequest("geonames", "geoname", query.getQuery());
             GetResponse getResponse = client.get(getRequest, RequestOptions.DEFAULT);
 
-            Map<String, Object> s = getResponse.getSourceAsMap();
-
-            String identifier = s.get("geonameid").toString();
-            String title = s.get("name").toString();
-
-            // Result nametype
-            // Feature code is missing for some entities (e.g., http://sws.geonames.org/6324466/)
-            String featureCode = s.get("fclass").toString();
-            if (s.get("fcode") != null) {
-                featureCode += "." + s.get("fcode").toString();
-            }
-
-            NameType nameType = new NameType(featureCode, featureCode);
+            Result r = buildResultFromSourceMap(getResponse.getSourceAsMap());
 
             // Filter invalid result (i.e., right ID, but different type)
-            if (query.getTypeStrict() != null && query.getTypeStrict().equals("should")
-                    && query.getNameType().getId().equalsIgnoreCase(featureCode)) {
-                results.add(new Result(identifier, title, nameType, 1.0, true));
+            if (query.getTypeStrict() == null || (query.getTypeStrict() != null && query.getTypeStrict().equals("should")
+                    && query.getNameType().getId().equalsIgnoreCase(r.getType().get(0).getId()))) {
+                r.setScore(1.);
+                r.setMatch(true);
+                results.add(r);
             }
         } catch (IOException e) {
             System.err.println("Failed to get document from index. " + e.getMessage());
@@ -129,22 +167,11 @@ public class Geonames extends WebServiceDataSource {
 
             SearchHit[] searchHits = hits.getHits();
             for (SearchHit hit : searchHits) {
-                Map<String, Object> s = hit.getSourceAsMap();
-                //Result identifier
-                String identifier = s.get("geonameid").toString();
 
-                //Result Title
-                String title = s.get("name").toString();
+                Result r = buildResultFromSourceMap(hit.getSourceAsMap());
+                r.setScore(hit.getScore());
+                results.add(r);
 
-                // Result nametype
-                // Feature code is missing for some entities (e.g., http://sws.geonames.org/6324466/)
-                String featureCode = s.get("fclass").toString();
-                if (s.get("fcode") != null) {
-                    featureCode += "." + s.get("fcode").toString();
-                }
-                NameType nameType = new NameType(featureCode, featureCode);
-
-                results.add(new Result(identifier, title, nameType, hit.getScore(), false));
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -176,27 +203,26 @@ public class Geonames extends WebServiceDataSource {
     public CellList extend(String id, List<PropertyValueIdAndSettings> idsAndSettings) {
         CellList<String> cl = new CellList<>();
 
-
         for (PropertyValueIdAndSettings pv : idsAndSettings) {
             String queryString = String.format(
-                    "PREFIX gn: <http://www.geonames.org/ontology#>\n" +
+                    "PREFIX gn: <%s>\n" +
                             "select ?o ?name where {\n" +
-                            "  <http://sws.geonames.org/%s/> gn:%s ?o .\n" +
+                            "  <%s> <%s> ?o .\n" +
                             "  OPTIONAL {?o gn:name ?name .}\n" +
                             "}",
-                    id, pv.getId());
+                    GN_ONTOLOGY_PREFIX, urifyGeoNamesId(id), urifyPropertyId(pv.getId()));
 
             Query sparqlQuery = QueryFactory.create(queryString);
 
             ArrayList<Cell> cells = new ArrayList<>();
 
-            try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName)) {
+            try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
                 ResultSet sparqlResults = qexec.execSelect();
                 while (sparqlResults.hasNext()) {
                     QuerySolution soln = sparqlResults.nextSolution();
                     if (soln.getLiteral("name") != null) {
                         cells.add(new Cell(soln.getResource("o").getURI()
-                                .replace("http://sws.geonames.org/", "")
+                                .replace(GN_RESOURCE_PREFIX, "")
                                 .replace("/", ""),
                                 soln.getLiteral("name").getString()));
                     } else {
@@ -216,20 +242,21 @@ public class Geonames extends WebServiceDataSource {
 
     @Override
     public ColumnMetaData columnMetaData(PropertyValueIdAndSettings prop) {
+
         // TODO: replace this query with a request to ABSTAT!
         String queryString = String.format(
-                "PREFIX gn: <http://www.geonames.org/ontology#>\n" +
+                "PREFIX gn: <%s>\n" +
                         "select ?type (count(?type) as ?count)\n" +
                         "where {\n" +
-                        "  ?s gn:%s ?o .\n" +
+                        "  ?s <%s> ?o .\n" +
                         "  OPTIONAL {?o gn:featureCode ?type .}\n" +
                         "}\n" +
                         "group by ?type\n" +
                         "order by desc(?count)",
-                prop.getId());
+                GN_ONTOLOGY_PREFIX, urifyPropertyId(prop.getId()));
 
         Query sparqlQuery = QueryFactory.create(queryString);
-        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName)) {
+        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
             ResultSet sparqlResults = qexec.execSelect();
 
             Resource mostFreqType = sparqlResults.nextSolution().getResource("type");
@@ -238,7 +265,7 @@ public class Geonames extends WebServiceDataSource {
             col.setId(prop.getId());
             col.setName(prop.getId());
             if (mostFreqType != null) {
-                String type = mostFreqType.toString().replaceAll("http://www.geonames.org/ontology#", "");
+                String type = mostFreqType.toString().replace(GN_ONTOLOGY_PREFIX, "");
                 col.setType(new NameType(type, type));
             }
             return col;
@@ -251,8 +278,7 @@ public class Geonames extends WebServiceDataSource {
     public ProposePropertiesResponse proposeProperties(String type, int limit) {
 
         // TODO: replace this query with a request to ABSTAT!
-        String queryString = "PREFIX gn: <http://www.geonames.org/ontology#>\n" +
-                "select ?p\n" +
+        String queryString ="select ?p\n" +
                 "where {\n" +
                 "  ?s ?p ?o.\n" +
                 "}\n" +
@@ -260,10 +286,10 @@ public class Geonames extends WebServiceDataSource {
                 "order by desc(count (?p))";
 
         if (type != null) {
-            // type can be a featureCode (e.g., A.ADM1) or a featurClass (e.g., A), or null
+            // type can be a featureCode (e.g., A.ADM1) or a featureClass (e.g., A), or null
             String typeProperty = type.contains(".") ? "featureCode" : "featureClass";
             queryString = String.format(
-                    "PREFIX gn: <http://www.geonames.org/ontology#>\n" +
+                    "PREFIX gn: <%s>\n" +
                             "select ?p\n" +
                             "where {\n" +
                             "?s ?p ?o;\n" +
@@ -271,21 +297,18 @@ public class Geonames extends WebServiceDataSource {
                             "}\n" +
                             "group by ?p\n" +
                             "order by desc(count (?p))",
-                    typeProperty, type);
+                    GN_ONTOLOGY_PREFIX, typeProperty, type);
         }
 
         Query sparqlQuery = QueryFactory.create(queryString);
-        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName)) {
+        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
             ResultSet sparqlResults = qexec.execSelect();
 
             List<NameType> properties = new ArrayList<>();
             while (sparqlResults.hasNext()) {
                 QuerySolution soln = sparqlResults.nextSolution();
-                String property = soln.getResource("p").toString();
-                if (property.startsWith("http://www.geonames.org/ontology#")) {
-                    property = property.replace("http://www.geonames.org/ontology#", "");
-                    properties.add(new NameType(property, property));
-                }
+                String property = soln.getResource("p").toString().replace(GN_ONTOLOGY_PREFIX, "");
+                properties.add(new NameType(property, property));
                 if (limit > 0 && properties.size() == limit) {
                     break;
                 }
