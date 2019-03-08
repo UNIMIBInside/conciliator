@@ -56,6 +56,7 @@ public class Geonames extends WebServiceDataSource {
     private RestHighLevelClient client;
     private String sparqlEndpoint;
     private String graphName;
+    private String ontologyGraphName;
 
     // RDF prefixes for GeoNames ontology and resources
     private final String GN_ONTOLOGY_PREFIX = "http://www.geonames.org/ontology#";
@@ -75,6 +76,7 @@ public class Geonames extends WebServiceDataSource {
 
         this.sparqlEndpoint = geonamesConfig.getVirtuoso().getEndpoint();
         this.graphName = geonamesConfig.getVirtuoso().getGraphName();
+        this.ontologyGraphName = geonamesConfig.getVirtuoso().getOntologyGraphName();
     }
 
     @Override
@@ -312,30 +314,46 @@ public class Geonames extends WebServiceDataSource {
     @Override
     public ColumnMetaData columnMetaData(PropertyValueIdAndSettings prop) {
 
-        // TODO: replace this query with a request to ABSTAT!
-        String queryString = String.format(
-                "PREFIX gn: <%s>\n" +
-                        "select ?type (count(?type) as ?count)\n" +
-                        "where {\n" +
-                        "  ?s <%s> ?o .\n" +
-                        "  OPTIONAL {?o gn:featureCode ?type .}\n" +
-                        "}\n" +
-                        "group by ?type\n" +
-                        "order by desc(?count)",
-                GN_ONTOLOGY_PREFIX, urifyPropertyId(prop.getId()));
+        String queryString;
+        String onGraph;
+
+        if (this.ontologyGraphName != null) {
+            queryString = String.format("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n" +
+                            "PREFIX owl: <http://www.w3.org/2002/07/owl#>\n" +
+                            "select ?type where {\n" +
+                            "  <%s> rdfs:range [owl:hasValue ?type] .\n" +
+                            "}",
+                    urifyPropertyId(prop.getId()));
+            onGraph = this.ontologyGraphName;
+        } else {
+            // TODO: replace this query with a request to ABSTAT!
+            queryString = String.format(
+                    "PREFIX gn: <%s>\n" +
+                            "select ?type (count(?type) as ?count)\n" +
+                            "where {\n" +
+                            "  ?s <%s> ?o .\n" +
+                            "  OPTIONAL {?o gn:featureCode ?type .}\n" +
+                            "}\n" +
+                            "group by ?type\n" +
+                            "order by desc(?count)",
+                    GN_ONTOLOGY_PREFIX, urifyPropertyId(prop.getId()));
+            onGraph = this.graphName;
+        }
 
         Query sparqlQuery = QueryFactory.create(queryString);
-        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, onGraph, null, null)) {
             ResultSet sparqlResults = qexec.execSelect();
-
-            Resource mostFreqType = sparqlResults.nextSolution().getResource("type");
 
             ColumnMetaData col = new ColumnMetaData();
             col.setId(prop.getId());
             col.setName(prop.getId());
-            if (mostFreqType != null) {
-                String type = mostFreqType.toString().replace(GN_ONTOLOGY_PREFIX, "");
-                col.setType(new NameType(type, type));
+
+            if (sparqlResults.hasNext()) {
+                Resource mostFreqType = sparqlResults.nextSolution().getResource("type");
+                if (mostFreqType != null) {
+                    String type = mostFreqType.toString().replace(GN_ONTOLOGY_PREFIX, "");
+                    col.setType(new NameType(type, type));
+                }
             }
             return col;
         } catch (Exception e) {

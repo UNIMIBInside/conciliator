@@ -37,6 +37,7 @@ public class GeonamesConfig {
     public static class Virtuoso {
         private String endpoint;
         private String graphName;
+        private String ontologyGraphName;
 
         public String getEndpoint() {
             return endpoint;
@@ -52,6 +53,14 @@ public class GeonamesConfig {
 
         public void setGraphName(String graphName) {
             this.graphName = graphName;
+        }
+
+        public String getOntologyGraphName() {
+            return ontologyGraphName;
+        }
+
+        public void setOntologyGraphName(String ontologyGraphName) {
+            this.ontologyGraphName = ontologyGraphName;
         }
     }
 
