@@ -53,6 +53,8 @@ public class Geonames extends WebServiceDataSource {
         }
     }
 
+    private GeonamesConfig gnConfig;
+
     private RestHighLevelClient client;
     private String sparqlEndpoint;
     private String graphName;
@@ -72,6 +74,8 @@ public class Geonames extends WebServiceDataSource {
                     geonamesConfig.getElastic().get(i).getPort(), "http");
         }
 
+        this.gnConfig = geonamesConfig;
+
         this.client = new RestHighLevelClient(RestClient.builder(hosts));
 
         this.sparqlEndpoint = geonamesConfig.getVirtuoso().getEndpoint();
@@ -81,7 +85,7 @@ public class Geonames extends WebServiceDataSource {
 
     @Override
     public ServiceMetaDataResponse createServiceMetaDataResponse(String baseUrl) {
-        return new GeonamesMetaDataResponse(getName());
+        return new GeonamesMetaDataResponse(getName(), this.gnConfig.getProposeProperties());
     }
 
     @Override

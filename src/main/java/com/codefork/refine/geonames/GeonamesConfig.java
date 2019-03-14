@@ -1,5 +1,6 @@
 package com.codefork.refine.geonames;
 
+import com.codefork.refine.resources.ProposeProperties;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
@@ -66,6 +67,7 @@ public class GeonamesConfig {
 
     private List<Elastic> elastic = new ArrayList<>();
     private Virtuoso virtuoso;
+    private ProposeProperties proposeProperties;
 
     public List<Elastic> getElastic() {
         return elastic;
@@ -81,5 +83,13 @@ public class GeonamesConfig {
 
     public void setVirtuoso(Virtuoso virtuoso) {
         this.virtuoso = virtuoso;
+    }
+
+    public ProposeProperties getProposeProperties() {
+        return proposeProperties;
+    }
+
+    public void setProposeProperties(ProposeProperties proposeProperties) {
+        this.proposeProperties = proposeProperties;
     }
 }
