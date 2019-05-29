@@ -376,7 +376,7 @@ public class Geonames extends WebServiceDataSource {
                 "group by ?p\n" +
                 "order by desc(count (?p))";
 
-        if (type != null) {
+        if (type != null && !type.isEmpty()) {
             // type can be a featureCode (e.g., A.ADM1) or a featureClass (e.g., A), or null
             String typeProperty = type.contains(".") ? "featureCode" : "featureClass";
             queryString = String.format(
