@@ -11,11 +11,11 @@ public class GeotargetsMetaDataResponse extends ServiceMetaDataResponse {
 
     private final static String IDENTIFIER_SPACE = "http://inside.disco.unimib.it/ontology/geo/";
     private final static View VIEW = new View("http://inside.disco.unimib.it/ontology/geo/{{id}}");
-    private final static String SCHEMA_SPACE = "http://rdf.freebase.com/ns/type.object.id";
+    private final static String SCHEMA_SPACE = "http://dbpedia.org/ontology/";
     private final static List<NameType> DEFAULT_TYPES = new ArrayList<>();
 
     static {
-        DEFAULT_TYPES.add(new NameType("http://www.w3.org/2002/07/owl#Thing", "Thing"));
+        DEFAULT_TYPES.add(new NameType("Thing", "Thing"));
     }
 
     public GeotargetsMetaDataResponse(String baseServiceName) {
