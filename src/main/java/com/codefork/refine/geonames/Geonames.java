@@ -251,19 +251,54 @@ public class Geonames extends WebServiceDataSource {
 
         return getResultsFromElasticQueryBuilder(boolBuilder, query);
     }
+    private List<Result> matchingByProprieties(SearchQuery query, List<Result>  results) {
 
+        String[] strs = query.getProperties().keySet().toArray(new String[query.getProperties().size()]);
+        String queryString = "";
+             for (Result res : results) {
+                     queryString =   "ask \n" +
+                                     "where {\n";
+                 for (String str : strs) {
+                     queryString = queryString + String.format(
+                                 "<%s> <%s> <%s> .\n",
+                              urifyGeoNamesId(res.getId()),urifyPropertyId(str), urifyGeoNamesId(query.getProperties().get(str).asString()));
+                 }
+                 queryString = queryString + "}";
+                 Query sparqlQuery = QueryFactory.create(queryString);
+
+                 try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+
+                        boolean sparqlResults = false;
+                        sparqlResults = qexec.execAsk();
+                     if(sparqlResults){
+                         for (Result r : results) {
+                             if (res.getId() != r.getId()) {
+                                 results.remove(r);
+                             }
+                         }
+                         return results;
+                     }
+                     return results;
+                     }catch (Exception e) {
+                     return null;
+                    }
+                 }
+             return results;
+    }
     @Override
     public List<Result> search(SearchQuery query) {
 
         List<Result> results;
         Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
-
         if (coordinate != null) {
             results = this.matchingByCoordinate(query, coordinate);
         } else if (isGeonamesId(query.getQuery())) {
             results = this.matchingByIdentifier(query);
         } else {
             results = this.matchingByLookup(query);
+        }
+        if(!query.getProperties().isEmpty()) {
+            results = this.matchingByProprieties(query, results);
         }
 
         // Match if the first result score is equal to 1.0
