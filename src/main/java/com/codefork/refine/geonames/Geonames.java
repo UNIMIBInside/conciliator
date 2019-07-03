@@ -278,11 +278,11 @@ public class Geonames extends WebServiceDataSource {
                          }
                          return results;
                      }
-                     return results;
                      }catch (Exception e) {
                      return null;
                     }
                  }
+             results.clear();
              return results;
     }
     @Override
