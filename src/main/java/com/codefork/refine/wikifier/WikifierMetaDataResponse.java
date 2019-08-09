@@ -11,8 +11,8 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class WikifierMetaDataResponse extends ServiceMetaDataResponse {
 
-    private final static String IDENTIFIER_SPACE = "http://www.dbpedia.org/resource/";
-    private final static View VIEW = new View("http://www.dbpedia.org/resource/{{id}}");
+    private final static String IDENTIFIER_SPACE = "http://dbpedia.org/resource/";
+    private final static View VIEW = new View("http://dbpedia.org/resource/{{id}}");
     private final static String SCHEMA_SPACE = "http://dbpedia.org/ontology/";
     private final static List<NameType> DEFAULT_TYPES = new ArrayList<>();
 
