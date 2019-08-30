@@ -251,55 +251,81 @@ public class Geonames extends WebServiceDataSource {
 
         return getResultsFromElasticQueryBuilder(boolBuilder, query);
     }
+
     private List<Result> matchingByProprieties(SearchQuery query, List<Result>  results) {
 
         String[] strs = query.getProperties().keySet().toArray(new String[query.getProperties().size()]);
+
+        List<Result> lr = new ArrayList<>();
+
         String queryString = "";
+
              for (Result res : results) {
-                     queryString =   "ask \n" +
-                                     "where {\n";
+
+                 queryString = "ask \n" +
+                         "where {\n";
                  for (String str : strs) {
-                     queryString = queryString + String.format(
-                                 "<%s> <%s> <%s> .\n",
-                              urifyGeoNamesId(res.getId()),urifyPropertyId(str), urifyGeoNamesId(query.getProperties().get(str).asString()));
+                     if (query.getProperties().get(str) instanceof com.codefork.refine.PropertyValueId) {
+                         if (query.getProperties().get(str) != null) {
+                             queryString = queryString + String.format(
+                                     "<%s> <%s> <%s> .\n",
+                                     urifyGeoNamesId(res.getId()), urifyPropertyId(str), urifyGeoNamesId(query.getProperties().get(str).asString()));
+
+                         }
+                     }else {
+                         if (query.getProperties().get(str) != null) {
+                             queryString = queryString + String.format(
+                                     "<%s> <%s> \"%s\" .\n",
+                                     urifyGeoNamesId(res.getId()), urifyPropertyId(str), query.getProperties().get(str).asString());
+                         }
+                     }
                  }
                  queryString = queryString + "}";
                  Query sparqlQuery = QueryFactory.create(queryString);
 
-                 try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
 
-                        boolean sparqlResults = false;
-                        sparqlResults = qexec.execAsk();
-                     if(sparqlResults){
-                         for (Result r : results) {
-                             if (res.getId() != r.getId()) {
-                                 results.remove(r);
-                             }
+                 boolean sparqlResults;
+
+
+                     try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+                         sparqlResults = qexec.execAsk();
+
+                         if(sparqlResults == true){
+                             lr.add(res);
                          }
-                         return results;
+
+                     } catch (Exception e) {
+                         System.err.println(e);
+                         return lr;
+
                      }
-                     }catch (Exception e) {
-                     return null;
-                    }
                  }
-             results.clear();
-             return results;
+             return lr;
     }
     @Override
     public List<Result> search(SearchQuery query) {
 
         List<Result> results;
         Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
+        boolean proprieties = query.getProperties().isEmpty();
         if (coordinate != null) {
             results = this.matchingByCoordinate(query, coordinate);
         } else if (isGeonamesId(query.getQuery())) {
             results = this.matchingByIdentifier(query);
+
+            if(!proprieties){
+
+                results = this.matchingByProprieties(query, results);
+            }
         } else {
             results = this.matchingByLookup(query);
+
+            if(!proprieties) {
+
+                results = this.matchingByProprieties(query, results);
+            }
         }
-        if(!query.getProperties().isEmpty()) {
-            results = this.matchingByProprieties(query, results);
-        }
+
 
         // Match if the first result score is equal to 1.0
         if (results.size() > 0 && results.get(0).getScore() == 1.0) {
