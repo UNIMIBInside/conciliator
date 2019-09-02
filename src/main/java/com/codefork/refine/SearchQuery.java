@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Represents a single query in a request sent by Open Refine.
@@ -164,15 +165,16 @@ public class SearchQuery {
     }
 
     public String getHashKey() {
-        String buf = ((query != null ? query : "") + "|" +
+        return ((query != null ? query : "") + "|" +
                 limit + "|" +
                 (nameType != null ? nameType.getId() : "") + "|" +
                 (typeStrict != null ? typeStrict : "") + "|" +
+                (properties != null ? properties.keySet().stream()
+                        .map(key -> key + "=" + properties.get(key).asString())
+                        .collect(Collectors.joining(", ", "{", "}")) : "") + "|" +
                 (viafSource != null ? viafSource : "") + "|" +
-                String.valueOf(isViafProxyMode) + "|" +
-                String.valueOf(isOrcidSmartNamesMode));
-
-        return buf;
+                isViafProxyMode + "|" +
+                isOrcidSmartNamesMode);
     }
 
 }
