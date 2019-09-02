@@ -252,19 +252,80 @@ public class Geonames extends WebServiceDataSource {
         return getResultsFromElasticQueryBuilder(boolBuilder, query);
     }
 
+    private List<Result> matchingByProprieties(SearchQuery query, List<Result>  results) {
+
+        String[] strs = query.getProperties().keySet().toArray(new String[query.getProperties().size()]);
+
+        List<Result> lr = new ArrayList<>();
+
+        String queryString = "";
+
+             for (Result res : results) {
+
+                 queryString = "ask \n" +
+                         "where {\n";
+                 for (String str : strs) {
+                     if (query.getProperties().get(str) instanceof com.codefork.refine.PropertyValueId) {
+                         if (query.getProperties().get(str) != null) {
+                             queryString = queryString + String.format(
+                                     "<%s> <%s> <%s> .\n",
+                                     urifyGeoNamesId(res.getId()), urifyPropertyId(str), urifyGeoNamesId(query.getProperties().get(str).asString()));
+
+                         }
+                     }else {
+                         if (query.getProperties().get(str) != null) {
+                             queryString = queryString + String.format(
+                                     "<%s> <%s> \"%s\" .\n",
+                                     urifyGeoNamesId(res.getId()), urifyPropertyId(str), query.getProperties().get(str).asString());
+                         }
+                     }
+                 }
+                 queryString = queryString + "}";
+                 Query sparqlQuery = QueryFactory.create(queryString);
+
+
+                 boolean sparqlResults;
+
+
+                     try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+                         sparqlResults = qexec.execAsk();
+
+                         if(sparqlResults == true){
+                             lr.add(res);
+                         }
+
+                     } catch (Exception e) {
+                         System.err.println(e);
+                         return lr;
+
+                     }
+                 }
+             return lr;
+    }
     @Override
     public List<Result> search(SearchQuery query) {
 
         List<Result> results;
         Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
-
+        boolean proprieties = query.getProperties().isEmpty();
         if (coordinate != null) {
             results = this.matchingByCoordinate(query, coordinate);
         } else if (isGeonamesId(query.getQuery())) {
             results = this.matchingByIdentifier(query);
+
+            if(!proprieties){
+
+                results = this.matchingByProprieties(query, results);
+            }
         } else {
             results = this.matchingByLookup(query);
+
+            if(!proprieties) {
+
+                results = this.matchingByProprieties(query, results);
+            }
         }
+
 
         // Match if the first result score is equal to 1.0
         if (results.size() > 0 && results.get(0).getScore() == 1.0) {
