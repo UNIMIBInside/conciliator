@@ -17,6 +17,9 @@
     <properties>
         <endorsed.dir>${project.build.directory}/endorsed</endorsed.dir>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <docker.image.name>conciliator</docker.image.name>
+        <docker.image.version>1.2.0</docker.image.version>
+        <docker.account.name>XXXX</docker.account.name>
     </properties>
     
     <parent>
@@ -156,6 +159,23 @@
                         <goals><goal>report</goal></goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.spotify</groupId>
+                <artifactId>docker-maven-plugin</artifactId>
+                <version>1.2.0</version>
+                <configuration>
+                    <imageName>${docker.account.name}/${docker.image.name}:${docker.image.version}</imageName>
+                    <dockerDirectory>${project.basedir}/docker</dockerDirectory>
+                    <skipDocker>false</skipDocker>
+                    <resources>
+                        <resource>
+                            <targetPath>/</targetPath>
+                            <directory>${project.build.directory}</directory>
+                            <include>${project.build.finalName}.jar</include>
+                        </resource>
+                    </resources>
+                </configuration>
             </plugin>
         </plugins>
     </build>
