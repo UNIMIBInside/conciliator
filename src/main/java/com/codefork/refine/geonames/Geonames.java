@@ -1,9 +1,6 @@
 package com.codefork.refine.geonames;
 
-import com.codefork.refine.ApplicationConfig;
-import com.codefork.refine.PropertyValueIdAndSettings;
-import com.codefork.refine.SearchQuery;
-import com.codefork.refine.ThreadPoolFactory;
+import com.codefork.refine.*;
 import com.codefork.refine.datasource.ConnectionFactory;
 import com.codefork.refine.datasource.WebServiceDataSource;
 import com.codefork.refine.resources.*;
@@ -95,6 +92,7 @@ public class Geonames extends WebServiceDataSource {
 
     /**
      * Return the URI of the GeoNames resource identified by the given ID
+     *
      * @param id the id of a GeoNames resource
      * @return the URI of the resource identified by the given id
      */
@@ -107,6 +105,7 @@ public class Geonames extends WebServiceDataSource {
      * Return the URI of the property identified by the given ID.
      * IDs which are already URI are returned as are, while other IDs
      * are transformed to GeoNames ontology properties.
+     *
      * @param id a string containing the ID
      * @return the URI of the property identified by the given ID
      */
@@ -121,6 +120,7 @@ public class Geonames extends WebServiceDataSource {
      * Use a Source Map obtained from ElasticSearch (geonames index)
      * to build a new Result.
      * Result score and match are set to -1 and false, respectively.
+     *
      * @param sourceMap a source map obtained from the "geonames" index
      * @return a new Result with score = -1 and match = false
      */
@@ -180,6 +180,7 @@ public class Geonames extends WebServiceDataSource {
      * Check if the given string could represent a GeoNames ID.
      * Since GeoNames IDs are integers, this method only check if
      * the given string represents a number.
+     *
      * @param query a string
      * @return true if the string could represent a GeoNames ID (i.e., contains a number)
      */
@@ -192,6 +193,7 @@ public class Geonames extends WebServiceDataSource {
      * A new Coordinate object is returned if the string matches
      * the "lat,long" format, and the coordinate is valid in the
      * WGS 84 system.
+     *
      * @param s a string
      * @return a Coordinate object
      */
@@ -252,80 +254,60 @@ public class Geonames extends WebServiceDataSource {
         return getResultsFromElasticQueryBuilder(boolBuilder, query);
     }
 
-    private List<Result> matchingByProprieties(SearchQuery query, List<Result>  results) {
-
-        String[] strs = query.getProperties().keySet().toArray(new String[query.getProperties().size()]);
+    private List<Result> matchingByProperties(SearchQuery query, List<Result> results) {
 
         List<Result> lr = new ArrayList<>();
 
-        String queryString = "";
+        for (Result res : results) {
 
-             for (Result res : results) {
+            StringBuilder queryString = new StringBuilder("ask where {\n");
 
-                 queryString = "ask \n" +
-                         "where {\n";
-                 for (String str : strs) {
-                     if (query.getProperties().get(str) instanceof com.codefork.refine.PropertyValueId) {
-                         if (query.getProperties().get(str) != null) {
-                             queryString = queryString + String.format(
-                                     "<%s> <%s> <%s> .\n",
-                                     urifyGeoNamesId(res.getId()), urifyPropertyId(str), urifyGeoNamesId(query.getProperties().get(str).asString()));
+            for (Map.Entry<String, PropertyValue> entry : query.getProperties().entrySet()) {
+                if (entry.getValue() != null) {
+                    String object = entry.getValue() instanceof com.codefork.refine.PropertyValueId ?
+                            String.format("<%s>", urifyGeoNamesId(entry.getValue().asString())) :
+                            String.format("\"%s\"", entry.getValue().asString());
 
-                         }
-                     }else {
-                         if (query.getProperties().get(str) != null) {
-                             queryString = queryString + String.format(
-                                     "<%s> <%s> \"%s\" .\n",
-                                     urifyGeoNamesId(res.getId()), urifyPropertyId(str), query.getProperties().get(str).asString());
-                         }
-                     }
-                 }
-                 queryString = queryString + "}";
-                 Query sparqlQuery = QueryFactory.create(queryString);
+                    queryString.append(String.format(
+                            "<%s> <%s> %s .\n",
+                            urifyGeoNamesId(res.getId()),
+                            urifyPropertyId(entry.getKey()),
+                            object));
+                }
+            }
 
+            queryString.append("}");
+            Query sparqlQuery = QueryFactory.create(queryString.toString());
 
-                 boolean sparqlResults;
-
-
-                     try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
-                         sparqlResults = qexec.execAsk();
-
-                         if(sparqlResults == true){
-                             lr.add(res);
-                         }
-
-                     } catch (Exception e) {
-                         System.err.println(e);
-                         return lr;
-
-                     }
-                 }
-             return lr;
+            try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+                if (qexec.execAsk()) {
+                    lr.add(res);
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return lr;
     }
+
     @Override
     public List<Result> search(SearchQuery query) {
 
         List<Result> results;
         Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
-        boolean proprieties = query.getProperties().isEmpty();
+
         if (coordinate != null) {
             results = this.matchingByCoordinate(query, coordinate);
         } else if (isGeonamesId(query.getQuery())) {
             results = this.matchingByIdentifier(query);
-
-            if(!proprieties){
-
-                results = this.matchingByProprieties(query, results);
-            }
         } else {
             results = this.matchingByLookup(query);
-
-            if(!proprieties) {
-
-                results = this.matchingByProprieties(query, results);
-            }
         }
 
+        // Filter results by properties (if any given)
+        if (!query.getProperties().isEmpty()) {
+            results = this.matchingByProperties(query, results);
+        }
 
         // Match if the first result score is equal to 1.0
         if (results.size() > 0 && results.get(0).getScore() == 1.0) {
@@ -430,7 +412,7 @@ public class Geonames extends WebServiceDataSource {
     public ProposePropertiesResponse proposeProperties(String type, int limit) {
 
         // TODO: replace this query with a request to ABSTAT!
-        String queryString ="select ?p\n" +
+        String queryString = "select ?p\n" +
                 "where {\n" +
                 "  ?s ?p ?o.\n" +
                 "}\n" +
