@@ -241,6 +241,7 @@ public class Geonames extends WebServiceDataSource {
                 .should(QueryBuilders.matchQuery("alternatenames", query.getQuery().toLowerCase()))
                 .should(QueryBuilders.matchQuery("asciiname", query.getQuery().toLowerCase()).boost(1.5f));
 
+
         return getResultsFromElasticQueryBuilder(boolBuilder, query);
     }
 
@@ -260,7 +261,7 @@ public class Geonames extends WebServiceDataSource {
 
         for (Result res : results) {
 
-            StringBuilder queryString = new StringBuilder("ask where {\n");
+            StringBuilder queryString = new StringBuilder("select ?o where {\n");
 
             for (Map.Entry<String, PropertyValue> entry : query.getProperties().entrySet()) {
                 if (entry.getValue() != null) {
@@ -269,10 +270,10 @@ public class Geonames extends WebServiceDataSource {
                             String.format("\"%s\"", entry.getValue().asString());
 
                     queryString.append(String.format(
-                            "<%s> <%s> %s .\n",
+                            "<%s> <%s> ?o .\n",
                             urifyGeoNamesId(res.getId()),
-                            urifyPropertyId(entry.getKey()),
-                            object));
+                            urifyPropertyId(entry.getKey())
+                            ));
                 }
             }
 
@@ -295,11 +296,12 @@ public class Geonames extends WebServiceDataSource {
 
         List<Result> results;
         Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
-
         if (coordinate != null) {
             results = this.matchingByCoordinate(query, coordinate);
         } else if (isGeonamesId(query.getQuery())) {
             results = this.matchingByIdentifier(query);
+        } else if(!query.getProperties().isEmpty()) {
+            results = this.matchingByProprieties(query);
         } else {
             results = this.matchingByLookup(query);
         }

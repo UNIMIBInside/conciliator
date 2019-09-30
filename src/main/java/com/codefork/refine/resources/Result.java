@@ -34,6 +34,7 @@ public class Result {
     private List<NameType> type;
     private double score;
     private boolean match;
+    private List<pvObject> pairPV;
 
     public Result() {
     }
@@ -44,6 +45,7 @@ public class Result {
         this.type = nameTypes;
         this.score = score;
         this.match = match;
+        this.pairPV = new ArrayList();
     }
 
     public Result(String id, String name, NameType nameType, double score, boolean match) {
