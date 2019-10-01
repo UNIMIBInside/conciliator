@@ -1,10 +1,13 @@
 package com.codefork.refine.geonames;
 
 import com.codefork.refine.*;
+import com.codefork.refine.resources.ObjectPV;
 import com.codefork.refine.datasource.ConnectionFactory;
 import com.codefork.refine.datasource.WebServiceDataSource;
 import com.codefork.refine.resources.*;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.text.similarity.JaroWinklerDistance;
+import org.apache.commons.text.similarity.SimilarityScore;
 import org.apache.http.HttpHost;
 import org.apache.jena.query.*;
 import org.apache.jena.rdf.model.Resource;
@@ -20,6 +23,7 @@ import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.SearchHits;
+import org.elasticsearch.search.aggregations.metrics.percentiles.tdigest.TDigestState;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
@@ -29,6 +33,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static java.lang.Double.NaN;
 
 @Component("geonames")
 public class Geonames extends WebServiceDataSource {
@@ -241,7 +247,6 @@ public class Geonames extends WebServiceDataSource {
                 .should(QueryBuilders.matchQuery("alternatenames", query.getQuery().toLowerCase()))
                 .should(QueryBuilders.matchQuery("asciiname", query.getQuery().toLowerCase()).boost(1.5f));
 
-
         return getResultsFromElasticQueryBuilder(boolBuilder, query);
     }
 
@@ -261,32 +266,78 @@ public class Geonames extends WebServiceDataSource {
 
         for (Result res : results) {
 
-            StringBuilder queryString = new StringBuilder("select ?o where {\n");
+            String columnValue = "";
+            StringBuilder queryString = new StringBuilder("Select distinct ?q where {\n");
 
             for (Map.Entry<String, PropertyValue> entry : query.getProperties().entrySet()) {
                 if (entry.getValue() != null) {
-                    String object = entry.getValue() instanceof com.codefork.refine.PropertyValueId ?
-                            String.format("<%s>", urifyGeoNamesId(entry.getValue().asString())) :
-                            String.format("\"%s\"", entry.getValue().asString());
+                    if(entry.getKey().contains("|")){
+                        String p1 = entry.getKey().substring(0,entry.getKey().indexOf("|"));
+                        String p2 = entry.getKey().substring(entry.getKey().indexOf("|")+1);
+                        queryString.append(String.format(
+                                "<%s> <%s>/<%s> ?q .\n",
+                                urifyGeoNamesId(res.getId()),
+                                urifyPropertyId(p1),
+                                urifyPropertyId(p2)));
+                        columnValue = entry.getValue().asString();
+                    }
+                    else {
+                        queryString.append(String.format(
+                                "<%s> <%s> ?q .\n",
+                                urifyGeoNamesId(res.getId()),
+                                urifyPropertyId(entry.getKey())));
+                        columnValue = entry.getValue().asString();
+                    }
+                }
 
-                    queryString.append(String.format(
-                            "<%s> <%s> ?o .\n",
-                            urifyGeoNamesId(res.getId()),
-                            urifyPropertyId(entry.getKey())
-                            ));
+
+                queryString.append("}");
+                System.out.println(queryString.toString());
+                Query sparqlQuery = QueryFactory.create(queryString.toString());
+                System.out.println(sparqlQuery);
+                try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+                    ResultSet sparqlResults = qexec.execSelect();
+                    SimilarityScore<Double> jw = new JaroWinklerDistance();
+                    boolean control = true;
+                    while (  sparqlResults.hasNext() && control) {
+                        QuerySolution soln = sparqlResults.nextSolution();
+                        if (soln.get("q") != null) {
+                            double similarity = jw.apply(columnValue, soln.getLiteral("q").getString());
+                            if(similarity > 0.9 && !Double.isNaN(similarity)) {
+                                ObjectPV pairPV = new ObjectPV();
+                                pairPV.setcolumnValue(columnValue);
+                                System.out.print("columnValue: ");
+                                System.out.println(columnValue);
+                                pairPV.setpropertyValue(soln.getLiteral("q").getString());
+                                System.out.print("Q: ");
+                                System.out.println(soln.getLiteral("q").getString());
+                                pairPV.setlabelOfProperty(entry.getKey());
+                                System.out.print("entry.getKey(): ");
+                                System.out.println(entry.getKey());
+                                pairPV.setLocalScore(similarity);
+                                System.out.print("pairPV.getLocalScore(): ");
+                                System.out.println(pairPV.getLocalScore());
+                                res.addPairPV(pairPV);
+                                control = false;
+                            }
+                        }
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
             }
-
-            queryString.append("}");
-            Query sparqlQuery = QueryFactory.create(queryString.toString());
-
-            try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
-                if (qexec.execAsk()) {
-                    lr.add(res);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            double totalscore = 0.0;
+              for(ObjectPV pairPV :  res.getPairPV()){
+                  totalscore += pairPV.getLocalScore();
+              }
+              totalscore = totalscore/res.getPairPV().size();
+              if(!Double.isNaN(totalscore)){
+              res.setScore(totalscore);
+                  System.out.print("res.getScore(): ");
+                  System.out.println(res.getScore());
+              }
+              else{res.setScore(0.0);}
+              lr.add(res);
         }
         return lr;
     }
@@ -294,14 +345,12 @@ public class Geonames extends WebServiceDataSource {
     @Override
     public List<Result> search(SearchQuery query) {
 
-        List<Result> results;
-        Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
+        List<Result> results;        Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
+
         if (coordinate != null) {
             results = this.matchingByCoordinate(query, coordinate);
         } else if (isGeonamesId(query.getQuery())) {
             results = this.matchingByIdentifier(query);
-        } else if(!query.getProperties().isEmpty()) {
-            results = this.matchingByProprieties(query);
         } else {
             results = this.matchingByLookup(query);
         }

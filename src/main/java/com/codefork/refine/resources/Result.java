@@ -34,7 +34,7 @@ public class Result {
     private List<NameType> type;
     private double score;
     private boolean match;
-    private List<pvObject> pairPV;
+    private List<ObjectPV> pairPV;
 
     public Result() {
     }
@@ -113,5 +113,15 @@ public class Result {
     public void setMatch(boolean match) {
         this.match = match;
     }
+
+    public List<ObjectPV> getPairPV() {
+        return pairPV;
+    }
+
+    public void setPairPV(List<NameType> resultType) {
+        this.pairPV = pairPV;
+    }
+
+    public void addPairPV(ObjectPV pairPV) { this.pairPV.add(pairPV); }
 
 }
