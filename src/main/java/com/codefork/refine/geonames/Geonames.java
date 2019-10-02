@@ -261,9 +261,10 @@ public class Geonames extends WebServiceDataSource {
     }
 
     private List<Result> matchingByProperties(SearchQuery query, List<Result> results) {
-
+        double threshold = 0.9;   //confidenza data dall'utente sulla similarità tra columnvalue-propertyvalue
         List<Result> lr = new ArrayList<>();
-
+        String restrict = "soft"; // restrizione della proprietà
+        String typeOfFylter = "similarity";
         for (Result res : results) {
 
             String columnValue = "";
@@ -297,31 +298,43 @@ public class Geonames extends WebServiceDataSource {
                 System.out.println(sparqlQuery);
                 try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
                     ResultSet sparqlResults = qexec.execSelect();
+                    if(typeOfFylter.toUpperCase().equals("SIMILARITY") ){
                     SimilarityScore<Double> jw = new JaroWinklerDistance();
                     boolean control = true;
                     while (  sparqlResults.hasNext() && control) {
+                        ObjectPV pairPV = new ObjectPV();
                         QuerySolution soln = sparqlResults.nextSolution();
                         if (soln.get("q") != null) {
                             double similarity = jw.apply(columnValue, soln.getLiteral("q").getString());
-                            if(similarity > 0.9 && !Double.isNaN(similarity)) {
-                                ObjectPV pairPV = new ObjectPV();
-                                pairPV.setcolumnValue(columnValue);
+                            if(similarity > threshold) {
+
+                                pairPV.setcolumnValue(columnValue); // setto il valore presente nella colonna selezionata
                                 System.out.print("columnValue: ");
                                 System.out.println(columnValue);
-                                pairPV.setpropertyValue(soln.getLiteral("q").getString());
+                                pairPV.setpropertyValue(soln.getLiteral("q").getString()); // setto il valore della proprietà presente nella base di conoscenza
                                 System.out.print("Q: ");
                                 System.out.println(soln.getLiteral("q").getString());
-                                pairPV.setlabelOfProperty(entry.getKey());
+                                pairPV.setlabelOfProperty(entry.getKey()); //setto la proprietà
                                 System.out.print("entry.getKey(): ");
                                 System.out.println(entry.getKey());
-                                pairPV.setLocalScore(similarity);
+                                pairPV.setLocalScore(similarity); // setto la similarità
                                 System.out.print("pairPV.getLocalScore(): ");
                                 System.out.println(pairPV.getLocalScore());
+                                pairPV.setRestrict(restrict); // setto la restrizione(soft or hard)
+                                pairPV.setfilterType(typeOfFylter); // setto il tipo di filtro
                                 res.addPairPV(pairPV);
                                 control = false;
                             }
+                        }else{//se non ci sono propertyvalue candidati nella base di conoscenza
+                            if(restrict.toUpperCase().equals("HARD")) { // se la restrizione è hard allora
+                                pairPV.setcolumnValue(columnValue); // setto valore colonna
+                                pairPV.setLocalScore(0); // local score
+                                pairPV.setRestrict(restrict); // restrizione
+                                res.addPairPV(pairPV);// aggiungo la pair
+                            }// altrimenti è soft allora posso non considerare la pair è non l'aggiungo.
                         }
                     }
+                } /// OTHER TYPE OF FILTER
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -330,13 +343,14 @@ public class Geonames extends WebServiceDataSource {
               for(ObjectPV pairPV :  res.getPairPV()){
                   totalscore += pairPV.getLocalScore();
               }
+              if(res.getPairPV().size() > 0){
               totalscore = totalscore/res.getPairPV().size();
+              }
               if(!Double.isNaN(totalscore)){
               res.setScore(totalscore);
                   System.out.print("res.getScore(): ");
                   System.out.println(res.getScore());
               }
-              else{res.setScore(0.0);}
               lr.add(res);
         }
         return lr;
