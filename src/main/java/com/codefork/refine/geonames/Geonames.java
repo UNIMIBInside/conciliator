@@ -297,7 +297,6 @@ public class Geonames extends WebServiceDataSource {
                     String typeOfFilter = entry.getValue().opt.getFilterType();
                     String operator = entry.getValue().opt.getOperator();
 
-
                     if (typeOfFilter.toUpperCase().equals("SIMILARITY")) {/// if this filter is enabled then
                         SimilarityScore<Double> jw = new JaroWinklerDistance();
                         boolean control = true;
@@ -346,13 +345,9 @@ public class Geonames extends WebServiceDataSource {
                                 } else {
                                     double similarity = jw.apply(urifyGeoNamesId(columnValue), soln.getResource("q").toString());
                                     if (similarity == 1) {/// in this case the user has to insert the condition of exactMatch(threshold == 1)
-
                                         pairPV.setcolumnValue(urifyGeoNamesId(columnValue));
-
                                         pairPV.setpropertyValue(soln.getResource("q").toString());
-
                                         pairPV.setlabelOfProperty(entry.getKey());
-
                                         pairPV.setLocalScore(similarity);
                                         pairPV.setRestrict(restrict);
                                         pairPV.setfilterType(typeOfFilter);
