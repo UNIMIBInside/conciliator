@@ -369,7 +369,7 @@ public class Geonames extends WebServiceDataSource {
                                 }// otherwise is"soft" and i can not considerate the pair and i don't add it
                             }
                         }
-                    } /// OTHER TYPE OF FILTER
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
