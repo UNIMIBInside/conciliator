@@ -7,7 +7,9 @@ public class ObjectPV {
     private String labelOfProperty;
     private double localScore;
     private String filterType;
-    private enum pair_Strict {soft, hard};
+
+    private enum pair_Strict {soft, hard}
+
     private pair_Strict restrict;
 
 
@@ -62,13 +64,19 @@ public class ObjectPV {
         return this.filterType;
     }
 
-    public void setRestrict(String restrict){
-        if (restrict.toUpperCase().equals("SOFT")){
-        this.restrict = pair_Strict.soft;
-        }else if (restrict.toUpperCase().equals("HARD")) {this.restrict = pair_Strict.hard;
-        }else{ System.err.println("invalid Restrict");}
+    public void setRestrict(String restrict) {
+        if (restrict.toUpperCase().equals("SOFT")) {
+            this.restrict = pair_Strict.soft;
+        } else if (restrict.toUpperCase().equals("HARD")) {
+            this.restrict = pair_Strict.hard;
+        } else {
+            System.err.println("invalid Restrict");
+        }
 
     }
-    public pair_Strict getRestrict(){return this.restrict;}
+
+    public pair_Strict getRestrict() {
+        return this.restrict;
+    }
 
 }

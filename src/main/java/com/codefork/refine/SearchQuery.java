@@ -90,11 +90,11 @@ public class SearchQuery {
                 JsonNode propertyJson = prop.path("opt");
                 PropertyOption opt = new PropertyOption();
                 if (!propertyJson.isMissingNode()) {
-                        opt.setFilterType(propertyJson.path("filterType").asText());
-                        opt.setOperator(propertyJson.path("operator").asText());
-                        opt.setThreshold(propertyJson.path("threshold").asDouble());
-                        opt.setRestrict(propertyJson.path("restrict").asText());
-                        val.opt = opt;
+                    opt.setFilterType(propertyJson.path("filterType").asText());
+                    opt.setOperator(propertyJson.path("operator").asText());
+                    opt.setThreshold(propertyJson.path("threshold").asDouble());
+                    opt.setRestrict(propertyJson.path("restrict").asText());
+                    val.opt = opt;
                 }
                 properties.put(key, val);
             }

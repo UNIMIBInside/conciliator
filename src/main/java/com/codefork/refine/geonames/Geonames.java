@@ -306,18 +306,18 @@ public class Geonames extends WebServiceDataSource {
                             if (soln.get("q") != null) {
                                 if (soln.get("q").isLiteral()) {
                                     double similarity = jw.apply(columnValue, soln.getLiteral("q").getString());
-                                    if(operator.equals('>')){
-                                    if (similarity > threshold) {
-                                        pairPV.setcolumnValue(columnValue);
-                                        pairPV.setpropertyValue(soln.getLiteral("q").getString());
-                                        pairPV.setlabelOfProperty(entry.getKey());
-                                        pairPV.setLocalScore(similarity);
-                                        pairPV.setRestrict(restrict);
-                                        pairPV.setfilterType(typeOfFilter);
-                                        res.addPairPV(pairPV);
-                                        control = false;
-                                    }
-                                    }else if(operator.equals('=')){
+                                    if (operator.equals('>')) {
+                                        if (similarity > threshold) {
+                                            pairPV.setcolumnValue(columnValue);
+                                            pairPV.setpropertyValue(soln.getLiteral("q").getString());
+                                            pairPV.setlabelOfProperty(entry.getKey());
+                                            pairPV.setLocalScore(similarity);
+                                            pairPV.setRestrict(restrict);
+                                            pairPV.setfilterType(typeOfFilter);
+                                            res.addPairPV(pairPV);
+                                            control = false;
+                                        }
+                                    } else if (operator.equals('=')) {
                                         if (similarity == threshold) {
                                             pairPV.setcolumnValue(columnValue);
                                             pairPV.setpropertyValue(soln.getLiteral("q").getString());
@@ -329,8 +329,8 @@ public class Geonames extends WebServiceDataSource {
                                             res.addPairPV(pairPV);
                                             control = false;
                                         }
-                                    }else if( operator.equals('<')){
-                                        if (similarity < threshold){
+                                    } else if (operator.equals('<')) {
+                                        if (similarity < threshold) {
                                             pairPV.setcolumnValue(columnValue);
                                             pairPV.setpropertyValue(soln.getLiteral("q").getString());
                                             pairPV.setlabelOfProperty(entry.getKey());
