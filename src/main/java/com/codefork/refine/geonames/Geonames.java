@@ -289,17 +289,14 @@ public class Geonames extends WebServiceDataSource {
                 }
 
                 queryString.append("}");
-                System.out.println(queryString.toString());
                 Query sparqlQuery = QueryFactory.create(queryString.toString());
-                System.out.println(sparqlQuery);
                 try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
                     ResultSet sparqlResults = qexec.execSelect();
                     double threshold = entry.getValue().opt.getThreshold();//User's confidence about similarity between columnvalue-propertyvalue
                     String restrict = entry.getValue().opt.getRestrict();// restriction of propriety
                     String typeOfFilter = entry.getValue().opt.getFilterType();
                     String operator = entry.getValue().opt.getOperator();
-                    System.out.println("typeOfFilter: " + typeOfFilter + " operator: " + operator + " threshold: " + threshold
-                    + " restrict: " + restrict);
+
 
                     if (typeOfFilter.toUpperCase().equals("SIMILARITY")) {/// if this filter is enabled then
                         SimilarityScore<Double> jw = new JaroWinklerDistance();
@@ -315,7 +312,6 @@ public class Geonames extends WebServiceDataSource {
                                         pairPV.setcolumnValue(columnValue);
                                         pairPV.setpropertyValue(soln.getLiteral("q").getString());
                                         pairPV.setlabelOfProperty(entry.getKey());
-                                        System.out.println(similarity);
                                         pairPV.setLocalScore(similarity);
                                         pairPV.setRestrict(restrict);
                                         pairPV.setfilterType(typeOfFilter);
@@ -385,8 +381,6 @@ public class Geonames extends WebServiceDataSource {
             if (res.getPairPV().size() > 0) {
                 totalscore = totalscore / res.getPairPV().size();
                 res.setScore((totalscore * 100) + res.getScore());
-                System.out.print("res.getScore(): ");
-                System.out.println(res.getScore());
             }
             lr.add(res);
         }
