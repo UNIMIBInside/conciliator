@@ -6,8 +6,12 @@ public class PropertyValueId extends PropertyValue {
 
     public PropertyValueId(String id) {
         this.id = id;
+        super.opt = new PropertyOption();
     }
-
+    public PropertyValueId(String id, PropertyOption opt) {
+        this.id = id;
+        super.opt = opt;
+    }
     public String getId() {
         return id;
     }

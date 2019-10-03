@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
  * Represents a single query in a request sent by Open Refine.
  * For the JSON format of this query, see
  * https://github.com/OpenRefine/OpenRefine/wiki/Reconciliation-Service-API
- *
+ * <p>
  * There's not much documentation about the type_strict field:
  * when it's set, it's always "should" although the docs say there
  * are other possible values.
@@ -50,45 +50,52 @@ public class SearchQuery {
 
     public SearchQuery(JsonNode queryStruct) {
         int limit = queryStruct.path("limit").asInt();
-        if(limit == 0) {
+        if (limit == 0) {
             limit = 3;
         }
 
         String typeFromJson = queryStruct.path("type").asText();
         NameType nameType = null;
-        if(typeFromJson != null && typeFromJson.length() > 0) {
+        if (typeFromJson != null && typeFromJson.length() > 0) {
             nameType = new NameType(typeFromJson, null);
         }
 
         String typeStrict = null;
-        if(!queryStruct.path("type_strict").isMissingNode()) {
+        if (!queryStruct.path("type_strict").isMissingNode()) {
             typeStrict = queryStruct.path("type_strict").asText();
         }
 
         Map<String, PropertyValue> properties = new HashMap<>();
-        if(!queryStruct.path("properties").isMissingNode()) {
+        if (!queryStruct.path("properties").isMissingNode()) {
             Iterator<JsonNode> propObjects = queryStruct.path("properties").elements();
-            while(propObjects.hasNext()) {
+            while (propObjects.hasNext()) {
                 JsonNode prop = propObjects.next();
                 String key = null;
-                if(!prop.path("p").isMissingNode()) {
+                if (!prop.path("p").isMissingNode()) {
                     key = prop.path("p").asText();
-                } else if(!prop.path("pid").isMissingNode()) {
+                } else if (!prop.path("pid").isMissingNode()) {
                     key = prop.path("pid").asText();
                 }
-
                 JsonNode valNode = prop.path("v");
                 PropertyValue val = null;
-                if(!valNode.isMissingNode()) {
-                    if(valNode.isTextual()) {
+                if (!valNode.isMissingNode()) {
+                    if (valNode.isTextual()) {
                         val = new PropertyValueString(valNode.asText());
-                    } else if(valNode.isNumber()) {
+                    } else if (valNode.isNumber()) {
                         val = new PropertyValueNumber(valNode.asLong());
-                    } else if(!valNode.path("id").isMissingNode()) {
+                    } else if (!valNode.path("id").isMissingNode()) {
                         val = new PropertyValueId(valNode.path("id").asText());
                     }
                 }
-
+                JsonNode propertyJson = prop.path("opt");
+                PropertyOption opt = new PropertyOption();
+                if (!propertyJson.isMissingNode()) {
+                        opt.setFilterType(propertyJson.path("filterType").asText());
+                        opt.setOperator(propertyJson.path("operator").asText());
+                        opt.setThreshold(propertyJson.path("threshold").asDouble());
+                        opt.setRestrict(propertyJson.path("restrict").asText());
+                        val.opt = opt;
+                }
                 properties.put(key, val);
             }
         }

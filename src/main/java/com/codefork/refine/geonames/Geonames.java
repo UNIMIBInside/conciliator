@@ -261,10 +261,8 @@ public class Geonames extends WebServiceDataSource {
     }
 
     private List<Result> matchingByProperties(SearchQuery query, List<Result> results) {
-        double threshold = 0.9;   //confidenza data dall'utente sulla similarità tra columnvalue-propertyvalue
         List<Result> lr = new ArrayList<>();
-        String restrict = "soft"; // restrizione della proprietà
-        String typeOfFylter = "similarity";
+
         for (Result res : results) {
 
             String columnValue = "";
@@ -272,17 +270,16 @@ public class Geonames extends WebServiceDataSource {
 
             for (Map.Entry<String, PropertyValue> entry : query.getProperties().entrySet()) {
                 if (entry.getValue() != null) {
-                    if(entry.getKey().contains("|")){
-                        String p1 = entry.getKey().substring(0,entry.getKey().indexOf("|"));
-                        String p2 = entry.getKey().substring(entry.getKey().indexOf("|")+1);
+                    if (entry.getKey().contains("|")) {
+                        String p1 = entry.getKey().substring(0, entry.getKey().indexOf("|"));
+                        String p2 = entry.getKey().substring(entry.getKey().indexOf("|") + 1);
                         queryString.append(String.format(
                                 "<%s> <%s>/<%s> ?q .\n",
                                 urifyGeoNamesId(res.getId()),
                                 urifyPropertyId(p1),
                                 urifyPropertyId(p2)));
                         columnValue = entry.getValue().asString();
-                    }
-                    else {
+                    } else {
                         queryString.append(String.format(
                                 "<%s> <%s> ?q .\n",
                                 urifyGeoNamesId(res.getId()),
@@ -291,67 +288,107 @@ public class Geonames extends WebServiceDataSource {
                     }
                 }
 
-
                 queryString.append("}");
                 System.out.println(queryString.toString());
                 Query sparqlQuery = QueryFactory.create(queryString.toString());
                 System.out.println(sparqlQuery);
                 try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
                     ResultSet sparqlResults = qexec.execSelect();
-                    if(typeOfFylter.toUpperCase().equals("SIMILARITY") ){
-                    SimilarityScore<Double> jw = new JaroWinklerDistance();
-                    boolean control = true;
-                    while (  sparqlResults.hasNext() && control) {
-                        ObjectPV pairPV = new ObjectPV();
-                        QuerySolution soln = sparqlResults.nextSolution();
-                        if (soln.get("q") != null) {
-                            double similarity = jw.apply(columnValue, soln.getLiteral("q").getString());
-                            if(similarity > threshold) {
+                    double threshold = entry.getValue().opt.getThreshold();//User's confidence about similarity between columnvalue-propertyvalue
+                    String restrict = entry.getValue().opt.getRestrict();// restriction of propriety
+                    String typeOfFilter = entry.getValue().opt.getFilterType();
+                    String operator = entry.getValue().opt.getOperator();
+                    System.out.println("typeOfFilter: " + typeOfFilter + " operator: " + operator + " threshold: " + threshold
+                    + " restrict: " + restrict);
 
-                                pairPV.setcolumnValue(columnValue); // setto il valore presente nella colonna selezionata
-                                System.out.print("columnValue: ");
-                                System.out.println(columnValue);
-                                pairPV.setpropertyValue(soln.getLiteral("q").getString()); // setto il valore della proprietà presente nella base di conoscenza
-                                System.out.print("Q: ");
-                                System.out.println(soln.getLiteral("q").getString());
-                                pairPV.setlabelOfProperty(entry.getKey()); //setto la proprietà
-                                System.out.print("entry.getKey(): ");
-                                System.out.println(entry.getKey());
-                                pairPV.setLocalScore(similarity); // setto la similarità
-                                System.out.print("pairPV.getLocalScore(): ");
-                                System.out.println(pairPV.getLocalScore());
-                                pairPV.setRestrict(restrict); // setto la restrizione(soft or hard)
-                                pairPV.setfilterType(typeOfFylter); // setto il tipo di filtro
-                                res.addPairPV(pairPV);
-                                control = false;
+                    if (typeOfFilter.toUpperCase().equals("SIMILARITY")) {/// if this filter is enabled then
+                        SimilarityScore<Double> jw = new JaroWinklerDistance();
+                        boolean control = true;
+                        while (sparqlResults.hasNext() && control) {
+                            ObjectPV pairPV = new ObjectPV();
+                            QuerySolution soln = sparqlResults.nextSolution();
+                            if (soln.get("q") != null) {
+                                if (soln.get("q").isLiteral()) {
+                                    double similarity = jw.apply(columnValue, soln.getLiteral("q").getString());
+                                    if(operator.equals('>')){
+                                    if (similarity > threshold) {
+                                        pairPV.setcolumnValue(columnValue);
+                                        pairPV.setpropertyValue(soln.getLiteral("q").getString());
+                                        pairPV.setlabelOfProperty(entry.getKey());
+                                        System.out.println(similarity);
+                                        pairPV.setLocalScore(similarity);
+                                        pairPV.setRestrict(restrict);
+                                        pairPV.setfilterType(typeOfFilter);
+                                        res.addPairPV(pairPV);
+                                        control = false;
+                                    }
+                                    }else if(operator.equals('=')){
+                                        if (similarity == threshold) {
+                                            pairPV.setcolumnValue(columnValue);
+                                            pairPV.setpropertyValue(soln.getLiteral("q").getString());
+                                            pairPV.setlabelOfProperty(entry.getKey());
+                                            System.out.println(similarity);
+                                            pairPV.setLocalScore(similarity);
+                                            pairPV.setRestrict(restrict);
+                                            pairPV.setfilterType(typeOfFilter);
+                                            res.addPairPV(pairPV);
+                                            control = false;
+                                        }
+                                    }else if( operator.equals('<')){
+                                        if (similarity < threshold){
+                                            pairPV.setcolumnValue(columnValue);
+                                            pairPV.setpropertyValue(soln.getLiteral("q").getString());
+                                            pairPV.setlabelOfProperty(entry.getKey());
+                                            System.out.println(similarity);
+                                            pairPV.setLocalScore(similarity);
+                                            pairPV.setRestrict(restrict);
+                                            pairPV.setfilterType(typeOfFilter);
+                                            res.addPairPV(pairPV);
+                                            control = false;
+                                        }
+                                    }
+                                } else {
+                                    double similarity = jw.apply(urifyGeoNamesId(columnValue), soln.getResource("q").toString());
+                                    if (similarity == 1) {/// in this case the user has to insert the condition of exactMatch(threshold == 1)
+
+                                        pairPV.setcolumnValue(urifyGeoNamesId(columnValue));
+
+                                        pairPV.setpropertyValue(soln.getResource("q").toString());
+
+                                        pairPV.setlabelOfProperty(entry.getKey());
+
+                                        pairPV.setLocalScore(similarity);
+                                        pairPV.setRestrict(restrict);
+                                        pairPV.setfilterType(typeOfFilter);
+                                        res.addPairPV(pairPV);
+                                        control = false;
+                                    }
+                                }
+                            } else {// if propertyvalue don't exist in knowledge-base
+                                if (restrict.toUpperCase().equals("HARD")) { // if restriction condition is "hard" then
+                                    pairPV.setcolumnValue(columnValue); // set value column
+                                    pairPV.setLocalScore(0); // local score
+                                    pairPV.setRestrict(restrict);
+                                    res.addPairPV(pairPV);// add pair at list
+                                }// otherwise is"soft" and i can not considerate the pair and i don't add it
                             }
-                        }else{//se non ci sono propertyvalue candidati nella base di conoscenza
-                            if(restrict.toUpperCase().equals("HARD")) { // se la restrizione è hard allora
-                                pairPV.setcolumnValue(columnValue); // setto valore colonna
-                                pairPV.setLocalScore(0); // local score
-                                pairPV.setRestrict(restrict); // restrizione
-                                res.addPairPV(pairPV);// aggiungo la pair
-                            }// altrimenti è soft allora posso non considerare la pair è non l'aggiungo.
                         }
-                    }
-                } /// OTHER TYPE OF FILTER
+                    } /// OTHER TYPE OF FILTER
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
             double totalscore = 0.0;
-              for(ObjectPV pairPV :  res.getPairPV()){
-                  totalscore += pairPV.getLocalScore();
-              }
-              if(res.getPairPV().size() > 0){
-              totalscore = totalscore/res.getPairPV().size();
-              }
-              if(!Double.isNaN(totalscore)){
-              res.setScore(totalscore);
-                  System.out.print("res.getScore(): ");
-                  System.out.println(res.getScore());
-              }
-              lr.add(res);
+            for (ObjectPV pairPV : res.getPairPV()) {
+                totalscore += pairPV.getLocalScore();
+            }
+            if (res.getPairPV().size() > 0) {
+                totalscore = totalscore / res.getPairPV().size();
+                res.setScore((totalscore * 100) + res.getScore());
+                System.out.print("res.getScore(): ");
+                System.out.println(res.getScore());
+            }
+            lr.add(res);
         }
         return lr;
     }
@@ -359,7 +396,8 @@ public class Geonames extends WebServiceDataSource {
     @Override
     public List<Result> search(SearchQuery query) {
 
-        List<Result> results;        Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
+        List<Result> results;
+        Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
 
         if (coordinate != null) {
             results = this.matchingByCoordinate(query, coordinate);

@@ -45,7 +45,7 @@ public class Result {
         this.type = nameTypes;
         this.score = score;
         this.match = match;
-        this.pairPV = new ArrayList();
+        this.pairPV = new ArrayList(); //extends openrefine Result model
     }
 
     public Result(String id, String name, NameType nameType, double score, boolean match) {

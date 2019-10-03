@@ -1,7 +1,5 @@
-
+//object for extend result in OpenRefine model
 package com.codefork.refine.resources;
-
-import com.codefork.refine.*;
 
 public class ObjectPV {
     private String columnValue;

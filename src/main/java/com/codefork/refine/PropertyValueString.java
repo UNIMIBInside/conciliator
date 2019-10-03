@@ -6,6 +6,12 @@ public class PropertyValueString extends PropertyValue {
 
     public PropertyValueString(String string) {
         this.string = string;
+        super.opt = new PropertyOption();
+    }
+
+    public PropertyValueString(String string, PropertyOption opt) {
+        this.string = string;
+        super.opt = opt;
     }
 
     public String getString() {

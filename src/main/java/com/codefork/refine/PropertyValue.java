@@ -1,10 +1,13 @@
 package com.codefork.refine;
 
+
+
 public abstract class PropertyValue {
 
     public enum PropertyValueType {
         ID, NUMBER, STRING
     }
+    public PropertyOption opt;
 
     public abstract PropertyValueType getValueType();
 

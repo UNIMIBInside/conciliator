@@ -6,6 +6,12 @@ public class PropertyValueNumber extends PropertyValue {
 
     public PropertyValueNumber(long number) {
         this.number = number;
+        super.opt = new PropertyOption();
+    }
+
+    public PropertyValueNumber(long number, PropertyOption opt) {
+        this.number = number;
+        super.opt = opt;
     }
 
     public long getNumber() {
