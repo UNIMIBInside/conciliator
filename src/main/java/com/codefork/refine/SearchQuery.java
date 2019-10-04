@@ -94,8 +94,8 @@ public class SearchQuery {
                     opt.setOperator(propertyJson.path("operator").asText());
                     opt.setThreshold(propertyJson.path("threshold").asDouble());
                     opt.setRestrict(propertyJson.path("restrict").asText());
-                    val.opt = opt;
                 }
+                val.opt = opt;
                 properties.put(key, val);
             }
         }

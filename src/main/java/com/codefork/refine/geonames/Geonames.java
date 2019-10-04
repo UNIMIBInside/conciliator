@@ -271,14 +271,15 @@ public class Geonames extends WebServiceDataSource {
             for (Map.Entry<String, PropertyValue> entry : query.getProperties().entrySet()) {
                 if (entry.getValue() != null) {
                     if (entry.getKey().contains("|")) {
-                        String p1 = entry.getKey().substring(0, entry.getKey().indexOf("|"));
-                        String p2 = entry.getKey().substring(entry.getKey().indexOf("|") + 1);
+                        String[] props = entry.getKey().split("|");
+                        for (String p: props) {
+                            p = "<" + urifyPropertyId(p) + ">";
+                        }
                         queryString.append(String.format(
-                                "<%s> <%s>/<%s> ?q .\n",
+                                "<%s> %s ?q .\n",
                                 urifyGeoNamesId(res.getId()),
-                                urifyPropertyId(p1),
-                                urifyPropertyId(p2)));
-                        columnValue = entry.getValue().asString();
+                                String.join("/", props)
+                        ));
                     } else {
                         queryString.append(String.format(
                                 "<%s> <%s> ?q .\n",
