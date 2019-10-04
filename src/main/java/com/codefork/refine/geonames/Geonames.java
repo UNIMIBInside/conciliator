@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import static java.lang.Double.NaN;
 
@@ -271,15 +272,16 @@ public class Geonames extends WebServiceDataSource {
             for (Map.Entry<String, PropertyValue> entry : query.getProperties().entrySet()) {
                 if (entry.getValue() != null) {
                     if (entry.getKey().contains("|")) {
-                        String[] props = entry.getKey().split("|");
-                        for (String p: props) {
-                            p = "<" + urifyPropertyId(p) + ">";
+                        String[] props = entry.getKey().split(Pattern.quote("|"));
+                        for (int i = 0; i < props.length; i++) {
+                            props[i] = "<" + urifyPropertyId(props[i]) + ">";
                         }
                         queryString.append(String.format(
                                 "<%s> %s ?q .\n",
                                 urifyGeoNamesId(res.getId()),
                                 String.join("/", props)
                         ));
+                        columnValue = entry.getValue().asString();
                     } else {
                         queryString.append(String.format(
                                 "<%s> <%s> ?q .\n",
@@ -288,8 +290,8 @@ public class Geonames extends WebServiceDataSource {
                         columnValue = entry.getValue().asString();
                     }
                 }
-
                 queryString.append("}");
+
                 Query sparqlQuery = QueryFactory.create(queryString.toString());
                 try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
                     ResultSet sparqlResults = qexec.execSelect();
@@ -307,7 +309,7 @@ public class Geonames extends WebServiceDataSource {
                             if (soln.get("q") != null) {
                                 if (soln.get("q").isLiteral()) {
                                     double similarity = jw.apply(columnValue, soln.getLiteral("q").getString());
-                                    if (operator.equals('>')) {
+                                    if (operator.equals(">")) {
                                         if (similarity > threshold) {
                                             pairPV.setcolumnValue(columnValue);
                                             pairPV.setpropertyValue(soln.getLiteral("q").getString());
@@ -318,24 +320,22 @@ public class Geonames extends WebServiceDataSource {
                                             res.addPairPV(pairPV);
                                             control = false;
                                         }
-                                    } else if (operator.equals('=')) {
+                                    } else if (operator.equals("=")) {
                                         if (similarity == threshold) {
                                             pairPV.setcolumnValue(columnValue);
                                             pairPV.setpropertyValue(soln.getLiteral("q").getString());
                                             pairPV.setlabelOfProperty(entry.getKey());
-                                            System.out.println(similarity);
                                             pairPV.setLocalScore(similarity);
                                             pairPV.setRestrict(restrict);
                                             pairPV.setfilterType(typeOfFilter);
                                             res.addPairPV(pairPV);
                                             control = false;
                                         }
-                                    } else if (operator.equals('<')) {
+                                    } else if (operator.equals("<")) {
                                         if (similarity < threshold) {
                                             pairPV.setcolumnValue(columnValue);
                                             pairPV.setpropertyValue(soln.getLiteral("q").getString());
                                             pairPV.setlabelOfProperty(entry.getKey());
-                                            System.out.println(similarity);
                                             pairPV.setLocalScore(similarity);
                                             pairPV.setRestrict(restrict);
                                             pairPV.setfilterType(typeOfFilter);
