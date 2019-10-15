@@ -263,13 +263,13 @@ public class Geonames extends WebServiceDataSource {
 
     private List<Result> matchingByProperties(SearchQuery query, List<Result> results) {
         List<Result> lr = new ArrayList<>();
-
+        int Ws = 50;
+        int Wh = 100;
         for (Result res : results) {
 
             String columnValue = "";
-            StringBuilder queryString = new StringBuilder("Select distinct ?q where {\n");
-
             for (Map.Entry<String, PropertyValue> entry : query.getProperties().entrySet()) {
+                StringBuilder queryString = new StringBuilder("Select distinct ?q where {\n");
                 if (entry.getValue() != null) {
                     if (entry.getKey().contains("|")) {
                         String[] props = entry.getKey().split(Pattern.quote("|"));
@@ -314,7 +314,9 @@ public class Geonames extends WebServiceDataSource {
                                             pairPV.setcolumnValue(columnValue);
                                             pairPV.setpropertyValue(soln.getLiteral("q").getString());
                                             pairPV.setlabelOfProperty(entry.getKey());
-                                            pairPV.setLocalScore(similarity);
+                                            if(restrict.toUpperCase().equals("HARD")) {
+                                                pairPV.setLocalScore(similarity*Wh);
+                                            }else {pairPV.setLocalScore(similarity*Ws); }
                                             pairPV.setRestrict(restrict);
                                             pairPV.setfilterType(typeOfFilter);
                                             res.addPairPV(pairPV);
@@ -325,22 +327,37 @@ public class Geonames extends WebServiceDataSource {
                                             pairPV.setcolumnValue(columnValue);
                                             pairPV.setpropertyValue(soln.getLiteral("q").getString());
                                             pairPV.setlabelOfProperty(entry.getKey());
-                                            pairPV.setLocalScore(similarity);
+                                            if(restrict.toUpperCase().equals("HARD")) {
+                                                pairPV.setLocalScore(similarity*Wh);
+                                            }else {pairPV.setLocalScore(similarity*Ws); }
                                             pairPV.setRestrict(restrict);
                                             pairPV.setfilterType(typeOfFilter);
                                             res.addPairPV(pairPV);
                                             control = false;
                                         }
-                                    } else if (operator.equals("<")) {
+                                    } else if (operator.equals("<")){
                                         if (similarity < threshold) {
                                             pairPV.setcolumnValue(columnValue);
                                             pairPV.setpropertyValue(soln.getLiteral("q").getString());
                                             pairPV.setlabelOfProperty(entry.getKey());
-                                            pairPV.setLocalScore(similarity);
+                                            if(restrict.toUpperCase().equals("HARD")) {
+                                                pairPV.setLocalScore(similarity*Wh);
+                                            }else {pairPV.setLocalScore(similarity*Ws); }
                                             pairPV.setRestrict(restrict);
                                             pairPV.setfilterType(typeOfFilter);
                                             res.addPairPV(pairPV);
                                             control = false;
+                                        }else{
+                                            if(restrict.toUpperCase().equals("HARD")) {
+                                                pairPV.setcolumnValue(columnValue);
+                                                pairPV.setpropertyValue(soln.getLiteral("q").getString());
+                                                pairPV.setlabelOfProperty(entry.getKey());
+                                                pairPV.setLocalScore(0);
+                                                pairPV.setRestrict(restrict);
+                                                pairPV.setfilterType(typeOfFilter);
+                                                res.addPairPV(pairPV);
+                                            }
+                                                control = false;
                                         }
                                     }
                                 } else {
@@ -349,7 +366,9 @@ public class Geonames extends WebServiceDataSource {
                                         pairPV.setcolumnValue(urifyGeoNamesId(columnValue));
                                         pairPV.setpropertyValue(soln.getResource("q").toString());
                                         pairPV.setlabelOfProperty(entry.getKey());
-                                        pairPV.setLocalScore(similarity);
+                                        if(restrict.toUpperCase().equals("HARD")) {
+                                            pairPV.setLocalScore(similarity*Wh);
+                                        }else {pairPV.setLocalScore(similarity*Ws); }
                                         pairPV.setRestrict(restrict);
                                         pairPV.setfilterType(typeOfFilter);
                                         res.addPairPV(pairPV);
@@ -372,11 +391,11 @@ public class Geonames extends WebServiceDataSource {
             }
             double totalscore = 0.0;
             for (ObjectPV pairPV : res.getPairPV()) {
-                totalscore += pairPV.getLocalScore();
+                totalscore = totalscore + pairPV.getLocalScore();
             }
             if (res.getPairPV().size() > 0) {
                 totalscore = totalscore / res.getPairPV().size();
-                res.setScore((totalscore * 100) + res.getScore());
+                res.setScore(totalscore + res.getScore());
             }
             lr.add(res);
         }
