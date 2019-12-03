@@ -1,12 +1,19 @@
 package com.codefork.refine.controllers;
 
 import com.codefork.refine.Application;
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
+import com.codefork.refine.MemSize;
 import com.codefork.refine.datasource.ConnectionFactory;
 import com.codefork.refine.datasource.SimulatedConnectionFactory;
 import com.codefork.refine.viaf.VIAF;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.ehcache.config.CacheConfiguration;
+import org.ehcache.config.builders.CacheConfigurationBuilder;
+import org.ehcache.config.builders.ResourcePoolsBuilder;
+import org.ehcache.core.config.DefaultConfiguration;
+import org.ehcache.expiry.Expirations;
+import org.ehcache.jsr107.EhcacheCachingProvider;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -15,16 +22,17 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.jcache.JCacheCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
-import java.util.Properties;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 @RunWith(SpringRunner.class)
@@ -35,19 +43,39 @@ public class VIAFControllerTest {
 
     @TestConfiguration
     static class TestConfig {
+
         @Bean
         ConnectionFactory connectionFactory() {
             return new SimulatedConnectionFactory();
         }
 
         @Bean
-        public Config config() {
-            Properties props = new Properties();
-            props.setProperty(Config.PROP_CACHE_TTL, String.valueOf(TTL_SECONDS));
+        public CacheManager cacheManager(@Autowired ApplicationConfig config) {
 
-            Config config = new Config();
-            config.merge(props);
-            return config;
+            MemSize memSize = MemSize.valueOf(config.getCache().getSize());
+
+            org.ehcache.config.CacheConfiguration<Object, Object> cacheConfiguration = CacheConfigurationBuilder
+                    .newCacheConfigurationBuilder(Object.class, Object.class,
+                            ResourcePoolsBuilder.newResourcePoolsBuilder()
+                                    .heap(memSize.getSize(), memSize.getUnit()))
+                    .withExpiry(Expirations.timeToLiveExpiration(new org.ehcache.expiry.Duration(TTL_SECONDS, TimeUnit.SECONDS)))
+                    .build();
+
+            Map<String, CacheConfiguration<?, ?>> caches = new HashMap<>();
+            caches.put(Application.CACHE_DEFAULT, cacheConfiguration);
+
+            EhcacheCachingProvider provider = (EhcacheCachingProvider) javax.cache.Caching.getCachingProvider();
+
+            // when our cacheManager bean is re-created several times for
+            // diff test configurations, this provider seems to hang on to state
+            // causing cache settings to not be right. so we always close().
+            provider.close();
+
+            DefaultConfiguration configuration = new DefaultConfiguration(
+                    caches, provider.getDefaultClassLoader());
+
+            return new JCacheCacheManager(
+                    provider.getCacheManager(provider.getDefaultURI(), configuration));
         }
     }
 

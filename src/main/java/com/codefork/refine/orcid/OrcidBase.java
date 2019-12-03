@@ -1,6 +1,6 @@
 package com.codefork.refine.orcid;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.PropertyValue;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.StringUtil;
@@ -42,7 +42,7 @@ public abstract class OrcidBase extends WebServiceDataSource {
     private final ThreadPool threadPoolForIndividualRecords;
 
     @Autowired
-    public OrcidBase(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public OrcidBase(ApplicationConfig config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
         threadPoolForIndividualRecords = threadPoolFactory.createThreadPool();
         threadPoolForIndividualRecords.setPoolSize(20);

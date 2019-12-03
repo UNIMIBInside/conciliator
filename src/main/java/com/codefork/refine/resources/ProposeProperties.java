@@ -9,6 +9,10 @@ public class ProposeProperties {
     @JsonProperty("service_path")
     private String servicePath;
 
+    public ProposeProperties(){
+
+    }
+
     public ProposeProperties(String serviceUrl, String servicePath) {
         this.serviceUrl = serviceUrl;
         this.servicePath = servicePath;

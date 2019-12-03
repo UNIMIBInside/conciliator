@@ -73,7 +73,7 @@ public interface DataExtensionAPI {
     @RequestMapping(value = { PATH_PROPOSE_PROPERTIES })
     @ResponseBody
     default ProposePropertiesResponse proposeProperties(
-            @RequestParam(value = "type") String type, @RequestParam(value = "limit", required = false) String limit)
+            @RequestParam(value = "type", required = false) String type, @RequestParam(value = "limit", required = false) String limit)
             throws ServiceNotImplementedException {
         int limitArg = limit != null ? Integer.valueOf(limit) : -1;
         return getDataSource().proposeProperties(type, limitArg);

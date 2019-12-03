@@ -1,33 +1,38 @@
-package com.codefork.refine.orcid;
+package com.codefork.refine.wikidata;
 
 import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
+import com.codefork.refine.datasource.WebServiceDataSource;
 import com.codefork.refine.resources.Result;
+import com.codefork.refine.resources.ServiceMetaDataResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-@Component("orcid")
-public class Orcid extends OrcidBase {
+@Component("wikidata")
+public class Wikidata extends WebServiceDataSource {
 
     @Autowired
-    public Orcid(ApplicationConfig config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public Wikidata(ApplicationConfig config, WikidataConfig wikidataConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
     }
 
     @Override
+    public ServiceMetaDataResponse createServiceMetaDataResponse(String baseUrl) {
+        return new WikidataMetaDataResponse(getName());
+    }
+
+    @Override
     public String getName() {
-        return "ORCID";
+        return "Wikidata";
     }
 
     @Override
     public List<Result> search(SearchQuery query) throws Exception {
-        List<Result> results = searchKeyword(query);
-        return results;
+        return null;
     }
-
 }

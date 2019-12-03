@@ -1,4 +1,4 @@
-package com.codefork.refine.wikifier;
+package com.codefork.refine.wikidata;
 
 import com.codefork.refine.resources.NameType;
 import com.codefork.refine.resources.ServiceMetaDataResponse;
@@ -9,23 +9,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class WikifierMetaDataResponse extends ServiceMetaDataResponse {
+public class WikidataMetaDataResponse extends ServiceMetaDataResponse {
 
-    private final static String IDENTIFIER_SPACE = "http://dbpedia.org/resource/";
-    private final static View VIEW = new View("http://dbpedia.org/resource/{{id}}");
-    private final static String SCHEMA_SPACE = "http://dbpedia.org/ontology/";
+    private final static String IDENTIFIER_SPACE = "http://www.wikidata.org/entity/";
+    private final static View VIEW = new View("http://www.wikidata.org/entity/{{id}}");
+    private final static String SCHEMA_SPACE = "http://www.wikidata.org/prop/direct/";
     private final static List<NameType> DEFAULT_TYPES = new ArrayList<>();
 
     static {
-        DEFAULT_TYPES.add(new NameType("Thing", "Thing"));
+        DEFAULT_TYPES.add(new NameType("Q35120", "entity"));
     }
 
-    public WikifierMetaDataResponse(String baseServiceName) {
+    public WikidataMetaDataResponse(String baseServiceName) {
         setName(baseServiceName);
         setIdentifierSpace(IDENTIFIER_SPACE);
         setSchemaSpace(SCHEMA_SPACE);
         setView(VIEW);
         setDefaultTypes(DEFAULT_TYPES);
     }
-
 }

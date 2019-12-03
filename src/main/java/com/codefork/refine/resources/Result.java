@@ -2,6 +2,7 @@
 package com.codefork.refine.resources;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -37,15 +38,6 @@ public class Result {
     public Result() {
     }
 
-    public Result(String id, String name, NameType nameType, double score, boolean match) {
-        this.id = id;
-        this.name = name;
-        this.type = new ArrayList<>();
-        this.type.add(nameType);
-        this.score = score;
-        this.match = match;
-    }
-
     public Result(String id, String name, List<NameType> nameTypes, double score, boolean match) {
         this.id = id;
         this.name = name;
@@ -54,6 +46,29 @@ public class Result {
         this.match = match;
     }
 
+    public Result(String id, String name, NameType nameType, double score, boolean match) {
+        this(id, name, new ArrayList<>(Collections.singletonList(nameType)), score, match);
+    }
+
+    /**
+     * This costructor sets score and match to -1 and false, respectively.
+     * @param id the result id
+     * @param name the result name
+     * @param nameTypes the list of result NameTypes
+     */
+    public Result(String id, String name, List<NameType> nameTypes) {
+        this(id, name, nameTypes, -1, false);
+    }
+
+    /**
+     * This costructor sets score and match to -1 and false, respectively.
+     * @param id the result id
+     * @param name the result name
+     * @param nameType the result NameType
+     */
+    public Result(String id, String name, NameType nameType) {
+        this(id, name, nameType, -1, false);
+    }
 
     public String getId() {
         return id;

@@ -1,53 +1,88 @@
 package com.codefork.refine.geonames;
 
-import com.arangodb.ArangoCursor;
-import com.arangodb.ArangoDB;
-import com.arangodb.ArangoDBException;
-import com.arangodb.entity.BaseDocument;
-import com.arangodb.util.MapBuilder;
-import com.codefork.refine.Config;
-import com.codefork.refine.PropertyValueIdAndSettings;
-import com.codefork.refine.SearchQuery;
-import com.codefork.refine.ThreadPoolFactory;
+import com.codefork.refine.*;
 import com.codefork.refine.datasource.ConnectionFactory;
 import com.codefork.refine.datasource.WebServiceDataSource;
 import com.codefork.refine.resources.*;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.text.similarity.JaroWinklerDistance;
-import org.apache.commons.text.similarity.SimilarityScore;
+import org.apache.http.HttpHost;
+import org.apache.jena.query.*;
+import org.apache.jena.rdf.model.Resource;
+import org.elasticsearch.action.get.GetRequest;
+import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.action.search.SearchRequest;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.client.RequestOptions;
+import org.elasticsearch.client.RestClient;
+import org.elasticsearch.client.RestHighLevelClient;
+import org.elasticsearch.common.unit.DistanceUnit;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.SearchHit;
+import org.elasticsearch.search.SearchHits;
+import org.elasticsearch.search.builder.SearchSourceBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 @Component("geonames")
 public class Geonames extends WebServiceDataSource {
 
-    private static final String PROP_ARANGO_HOST = "dbhost";
-    private static final String PROP_ARANGO_PORT = "dbport";
-    private static final String PROP_ARANGO_DBNAME = "dbname";
-    private static final String PROP_ARANGO_USER = "dbuser";
+    /**
+     * A private read-only object that represents a coordinate in the WGS 84 system.
+     */
+    private class Coordinate {
+        private double latitude;
+        private double longitude;
 
-    private final String dbName = getConfigProperties().getProperty(PROP_ARANGO_DBNAME);
-    private ArangoDB arangoDB;
+        Coordinate(double latitude, double longitude) {
+            this.latitude = latitude;
+            this.longitude = longitude;
+        }
+
+        boolean isValid() {
+            return this.latitude <= 90 && this.latitude >= -90 && this.longitude <= 180 && this.longitude >= -180;
+        }
+    }
+
+    private GeonamesConfig gnConfig;
+
+    private RestHighLevelClient client;
+    private String sparqlEndpoint;
+    private String graphName;
+    private String ontologyGraphName;
+
+    // RDF prefixes for GeoNames ontology and resources
+    private final String GN_ONTOLOGY_PREFIX = "http://www.geonames.org/ontology#";
+    private final String GN_RESOURCE_PREFIX = "http://sws.geonames.org/";
 
     @Autowired
-    public Geonames(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public Geonames(ApplicationConfig config, GeonamesConfig geonamesConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
 
-        String arangoHost = getConfigProperties().getProperty(PROP_ARANGO_HOST);
-        int arangoPort = Integer.parseInt(getConfigProperties().getProperty(PROP_ARANGO_PORT));
-        String dbUser = getConfigProperties().getProperty(PROP_ARANGO_USER);
-        this.arangoDB = new ArangoDB.Builder().host(arangoHost, arangoPort).user(dbUser).build();
+        HttpHost[] hosts = new HttpHost[geonamesConfig.getElastic().size()];
+        for (int i = 0; i < hosts.length; ++i) {
+            hosts[i] = new HttpHost(geonamesConfig.getElastic().get(i).getHost(),
+                    geonamesConfig.getElastic().get(i).getPort(), "http");
+        }
+
+        this.gnConfig = geonamesConfig;
+
+        this.client = new RestHighLevelClient(RestClient.builder(hosts));
+
+        this.sparqlEndpoint = geonamesConfig.getVirtuoso().getEndpoint();
+        this.graphName = geonamesConfig.getVirtuoso().getGraphName();
+        this.ontologyGraphName = geonamesConfig.getVirtuoso().getOntologyGraphName();
     }
 
     @Override
     public ServiceMetaDataResponse createServiceMetaDataResponse(String baseUrl) {
-        return new GeonamesMetaDataResponse(getName());
+        return new GeonamesMetaDataResponse(getName(), this.gnConfig.getProposeProperties());
     }
 
     @Override
@@ -55,52 +90,145 @@ public class Geonames extends WebServiceDataSource {
         return "GeoNames";
     }
 
-    private Result getResultFromIdentifier(String identifier) {
+    /**
+     * Return the URI of the GeoNames resource identified by the given ID
+     *
+     * @param id the id of a GeoNames resource
+     * @return the URI of the resource identified by the given id
+     */
+    private String urifyGeoNamesId(String id) {
+        // URIs of resources in GeoNames end with the /
+        return String.format("%s%s/", GN_RESOURCE_PREFIX, id);
+    }
 
-        try {
-            final String aqlQuery = "FOR feature IN `geonames-de`\n" +
-                    "    FILTER feature.`@id` == @identifier\n" +
-                    "    return {\n" +
-                    "    \"id\": feature.`@id`,\n" +
-                    "    \"name\": feature.`http://www.geonames.org/ontology#name`[0].`@value`,\n" +
-                    "    \"featureClass\": feature.`http://www.geonames.org/ontology#featureClass`[0].`@id`,\n" +
-                    "    \"featureCode\": feature.`http://www.geonames.org/ontology#featureCode`[0].`@id`\n" +
-                    "}";
-            final Map<String, Object> bindVars = new MapBuilder().put("identifier", identifier).get();
-            final ArangoCursor<BaseDocument> cursor = this.arangoDB.db(dbName).query(aqlQuery, bindVars, null,
-                    BaseDocument.class);
+    /**
+     * Return the URI of the property identified by the given ID.
+     * IDs which are already URI are returned as are, while other IDs
+     * are transformed to GeoNames ontology properties.
+     *
+     * @param id a string containing the ID
+     * @return the URI of the property identified by the given ID
+     */
+    private String urifyPropertyId(String id) {
+        if (id.startsWith("http:")) {
+            return id;
+        }
+        return GN_ONTOLOGY_PREFIX + id;
+    }
 
-            if (cursor.hasNext()) {
-                BaseDocument doc = cursor.next();
-                String title = doc.getAttribute("name").toString();
+    /**
+     * Use a Source Map obtained from ElasticSearch (geonames index)
+     * to build a new Result.
+     * Result score and match are set to -1 and false, respectively.
+     *
+     * @param sourceMap a source map obtained from the "geonames" index
+     * @return a new Result with score = -1 and match = false
+     */
+    private Result buildResultFromSourceMap(Map<String, Object> sourceMap) {
 
-                String featureCode;
-                if (doc.getAttribute("featureCode") != null) {
-                    featureCode = doc.getAttribute("featureCode").toString();
-                } else {
-                    featureCode = doc.getAttribute("featureClass").toString();
-                }
-                String featureCodeId = featureCode.substring(featureCode.lastIndexOf('#') + 1);
-                NameType nameType = new NameType(featureCodeId, featureCodeId);
-
-                // entities ids are stored as http://sws.geonames.org/{{id}}/
-                identifier = identifier.split("/")[3];
-                return new Result(identifier, title, nameType, 1, true);
-            }
-
-        } catch (final ArangoDBException e) {
-            System.err.println("Failed to execute query. " + e.getMessage());
+        // Feature code is missing for some entities (e.g., http://sws.geonames.org/6324466/)
+        String featureCode = sourceMap.get("fclass").toString();
+        if (sourceMap.get("fcode") != null) {
+            featureCode += "." + sourceMap.get("fcode").toString();
         }
 
-        return null;
+        return new Result(sourceMap.get("geonameid").toString(),
+                sourceMap.get("name").toString(),
+                new NameType(featureCode, featureCode));
+    }
+
+    private List<Result> getResultsFromElasticQueryBuilder(BoolQueryBuilder qb, SearchQuery query) {
+
+        if (query.getTypeStrict() != null && query.getTypeStrict().equals("should")) {
+            // The type is given as "class.code", or only "class" if the code is not available
+            String[] typeSplit = query.getNameType().getId().split("\\.");
+            if (typeSplit.length > 0) {
+                qb.filter(QueryBuilders.termQuery("fclass", typeSplit[0]));
+            }
+            if (typeSplit.length == 2) {
+                qb.filter(QueryBuilders.termQuery("fcode", typeSplit[1]));
+            }
+        }
+
+        List<Result> results = new ArrayList<>();
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(qb);
+        sourceBuilder.size(query.getLimit());
+
+        SearchRequest searchRequest = new SearchRequest("geonames");
+        searchRequest.source(sourceBuilder);
+
+        try {
+            SearchResponse searchResponse = client.search(searchRequest, RequestOptions.DEFAULT);
+            SearchHits hits = searchResponse.getHits();
+
+            SearchHit[] searchHits = hits.getHits();
+            for (SearchHit hit : searchHits) {
+
+                Result r = buildResultFromSourceMap(hit.getSourceAsMap());
+                r.setScore(hit.getScore());
+                results.add(r);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return results;
+    }
+
+    /**
+     * Check if the given string could represent a GeoNames ID.
+     * Since GeoNames IDs are integers, this method only check if
+     * the given string represents a number.
+     *
+     * @param query a string
+     * @return true if the string could represent a GeoNames ID (i.e., contains a number)
+     */
+    private boolean isGeonamesId(String query) {
+        return StringUtils.isNumeric(query);
+    }
+
+    /**
+     * Create a new Coordinate by reading a string.
+     * A new Coordinate object is returned if the string matches
+     * the "lat,long" format, and the coordinate is valid in the
+     * WGS 84 system.
+     *
+     * @param s a string
+     * @return a Coordinate object
+     */
+    private Coordinate getCoordinateFromString(String s) {
+        try {
+            String[] latLongStr = s.split(",");
+            Coordinate c = new Coordinate(Double.parseDouble(latLongStr[0]), Double.parseDouble(latLongStr[1]));
+            if (c.isValid()) {
+                return c;
+            } else {
+                return null;
+            }
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private List<Result> matchingByIdentifier(SearchQuery query) {
         List<Result> results = new ArrayList<>();
 
-        Result res = this.getResultFromIdentifier(query.getQuery());
-        if (res != null) {
-            results.add(res);
+        try {
+            GetRequest getRequest = new GetRequest("geonames", "geoname", query.getQuery());
+            GetResponse getResponse = client.get(getRequest, RequestOptions.DEFAULT);
+
+            Result r = buildResultFromSourceMap(getResponse.getSourceAsMap());
+
+            // Filter invalid result (i.e., right ID, but different type)
+            if (query.getTypeStrict() == null || (query.getTypeStrict() != null && query.getTypeStrict().equals("should")
+                    && query.getNameType().getId().equalsIgnoreCase(r.getType().get(0).getId()))) {
+                r.setScore(1.);
+                r.setMatch(true);
+                results.add(r);
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to get document from index. " + e.getMessage());
         }
 
         return results;
@@ -108,109 +236,80 @@ public class Geonames extends WebServiceDataSource {
 
     private List<Result> matchingByLookup(SearchQuery query) {
 
-        List<Result> results = new ArrayList<>();
+        BoolQueryBuilder boolBuilder = QueryBuilders.boolQuery()
+                .should(QueryBuilders.matchQuery("name", query.getQuery().toLowerCase()).boost(2.0f))
+                .should(QueryBuilders.matchQuery("alternatenames", query.getQuery().toLowerCase()))
+                .should(QueryBuilders.matchQuery("asciiname", query.getQuery().toLowerCase()).boost(1.5f));
 
-        String queryText = query.getQuery().replaceAll("-", " "); // remove dashes (ARANGO escapes them while indexing)
-        // Split camel case strings
-//        queryText = String.join(" ", queryText.split("(?<!(^|[A-Z]))(?=[A-Z])|(?<!^)(?=[A-Z][a-z])"));
+        return getResultsFromElasticQueryBuilder(boolBuilder, query);
+    }
 
-        // execute AQL queries
-        try {
+    private List<Result> matchingByCoordinate(SearchQuery query, Coordinate coordinate) {
 
-            // Try to find candidates by executing a fulltext query
-            final String aqlFulltextQuery = "for feature in FULLTEXT(`geonames-de`, \"allNames\", @queryText)\n" +
-                    "return {\n" +
-                    "    \"id\": feature.`@id`, \n" +
-                    "    \"name\": feature.`http://www.geonames.org/ontology#name`[0].`@value`,\n" +
-                    "    \"featureCode\": feature.`http://www.geonames.org/ontology#featureCode`[0].`@id`,\n" +
-                    "    \"featureClass\": feature.`http://www.geonames.org/ontology#featureClass`[0].`@id`,\n" +
-                    "    \"names\": feature.allNames\n" +
-                    "    }";
-            Map<String, Object> bindVars = new MapBuilder().put("queryText", queryText).get();
-            ArangoCursor<BaseDocument> cursor = arangoDB.db(dbName).query(aqlFulltextQuery, bindVars, null,
-                    BaseDocument.class);
+        BoolQueryBuilder boolBuilder = QueryBuilders.boolQuery()
+                .must(QueryBuilders.geoDistanceQuery("location")
+                        .point(coordinate.latitude, coordinate.longitude)
+                        .distance(10, DistanceUnit.KILOMETERS));
 
-            // In case of no results, try searching terms by using OR op
-            if (!cursor.hasNext()) {
-                queryText = queryText.replaceAll(" ", ",|");
-                bindVars.put("queryText", queryText);
-                cursor = arangoDB.db(dbName).query(aqlFulltextQuery, bindVars, null,
-                        BaseDocument.class);
+        return getResultsFromElasticQueryBuilder(boolBuilder, query);
+    }
+
+    private List<Result> matchingByProperties(SearchQuery query, List<Result> results) {
+
+        List<Result> lr = new ArrayList<>();
+
+        for (Result res : results) {
+
+            StringBuilder queryString = new StringBuilder("ask where {\n");
+
+            for (Map.Entry<String, PropertyValue> entry : query.getProperties().entrySet()) {
+                if (entry.getValue() != null) {
+                    String object = entry.getValue() instanceof com.codefork.refine.PropertyValueId ?
+                            String.format("<%s>", urifyGeoNamesId(entry.getValue().asString())) :
+                            String.format("\"%s\"", entry.getValue().asString());
+
+                    queryString.append(String.format(
+                            "<%s> <%s> %s .\n",
+                            urifyGeoNamesId(res.getId()),
+                            urifyPropertyId(entry.getKey()),
+                            object));
+                }
             }
 
-            // In case of empty results, get all the features available in Geonames
-//            if (!cursor.hasNext()) {
-//                final String aqlQuery = "for feature in `geonames-de`\n" +
-//                        "return {\n" +
-//                        "    \"id\": feature.`@id`,\n" +
-//                        "    \"names\": feature.allNames\n" +
-//                        "}";
-//                cursor = arangoDB.db(dbName).query(aqlQuery, null, null,
-//                        BaseDocument.class);
-//            }
+            queryString.append("}");
+            Query sparqlQuery = QueryFactory.create(queryString.toString());
 
-            SimilarityScore<Double> jw = new JaroWinklerDistance();
-
-            for (; cursor.hasNext();) {
-                BaseDocument doc = cursor.next();
-                // Result ID - geonames entities ids are stored as http://sws.geonames.org/{{id}}/
-                String identifier = doc.getAttribute("id").toString().split("/")[3];
-                //Result Title
-                String title = doc.getAttribute("name").toString();
-
-                // Result nametype
-                // Feature code is missing for some entities (e.g., http://sws.geonames.org/6324466/)
-                String featureCode;
-                if (doc.getAttribute("featureCode") != null) {
-                    featureCode = doc.getAttribute("featureCode").toString();
-                } else {
-                    featureCode = doc.getAttribute("featureClass").toString();
+            try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+                if (qexec.execAsk()) {
+                    lr.add(res);
                 }
-                String featureCodeId = featureCode.substring(featureCode.lastIndexOf('#') + 1);
-                NameType nameType = new NameType(featureCodeId, featureCodeId);
-
-                // Result score (the label with the highest similarity)
-                List<String> names = (ArrayList<String>)doc.getProperties().get("names");
-                double maxScore = .0;
-
-                for (String name : names) {
-                    double similarity = jw.apply(queryText, name);
-                    if (similarity > maxScore) {
-                        maxScore = similarity;
-                    }
-                }
-
-                results.add(new Result(identifier, title, nameType, maxScore, false));
+            } catch (Exception e) {
+                e.printStackTrace();
             }
-        } catch (final ArangoDBException e) {
-            System.err.println("Failed to execute query. " + e.getMessage());
         }
-
-        return results;
+        return lr;
     }
 
     @Override
     public List<Result> search(SearchQuery query) {
 
         List<Result> results;
+        Coordinate coordinate = this.getCoordinateFromString(query.getQuery());
 
-        if (StringUtils.isNumeric(query.getQuery())) {
+        if (coordinate != null) {
+            results = this.matchingByCoordinate(query, coordinate);
+        } else if (isGeonamesId(query.getQuery())) {
             results = this.matchingByIdentifier(query);
         } else {
             results = this.matchingByLookup(query);
         }
 
-        // Remove entities of non-allowed types
-        if (query.getTypeStrict() != null && query.getTypeStrict().equals("should")) {
-            NameType selectedType = new NameType(query.getNameType().getId(), null);
-            results.removeIf(obj -> !obj.getType().contains(selectedType));
+        // Filter results by properties (if any given)
+        if (!query.getProperties().isEmpty()) {
+            results = this.matchingByProperties(query, results);
         }
 
-        // Sort the results based on their score
-        results.sort(Comparator.comparingDouble(Result::getScore).reversed());
-
-        // Match if the first result score is equal to 1.0 or
-        // if there is only one result with a score greater than the threshold
+        // Match if the first result score is equal to 1.0
         if (results.size() > 0 && results.get(0).getScore() == 1.0) {
             results.get(0).setMatch(true);
         }
@@ -222,77 +321,141 @@ public class Geonames extends WebServiceDataSource {
     public CellList extend(String id, List<PropertyValueIdAndSettings> idsAndSettings) {
         CellList<String> cl = new CellList<>();
 
-        String geonamesId = "http://sws.geonames.org/" + id + "/";
-        BaseDocument doc = null;
-        try {
-            final String aqlQuery = "for feature in `geonames-de`\n" +
-                    "FILTER feature.`@id` == @geonamesId\n" +
-                    "return feature";
-            Map<String, Object> bindVars = new MapBuilder().put("geonamesId", geonamesId).get();
-            ArangoCursor<BaseDocument> cursor = arangoDB.db(dbName).query(aqlQuery, bindVars, null,
-                    BaseDocument.class);
+        for (PropertyValueIdAndSettings pv : idsAndSettings) {
+            String queryString = String.format(
+                    "PREFIX gn: <%s>\n" +
+                            "select ?o ?name where {\n" +
+                            "  <%s> <%s> ?o .\n" +
+                            "  OPTIONAL {?o gn:name ?name .}\n" +
+                            "}",
+                    GN_ONTOLOGY_PREFIX, urifyGeoNamesId(id), urifyPropertyId(pv.getId()));
 
-            if (cursor.hasNext()) {
-                doc = cursor.next();
-            }
-        } catch (final ArangoDBException e) {
-            System.err.println("Failed to execute query. " + e.getMessage());
-        }
+            Query sparqlQuery = QueryFactory.create(queryString);
 
-        if (doc != null) {
-            for (PropertyValueIdAndSettings pv: idsAndSettings) {
+            ArrayList<Cell> cells = new ArrayList<>();
 
-                if (doc.getProperties().containsKey("http://www.geonames.org/ontology#" + pv.getId())) {
-
-                    cl.put(pv.getId(), new ArrayList<>());
-
-                    ArrayList<Map<String, Object>> propertyObjects = (ArrayList<Map<String, Object>>)
-                            doc.getAttribute("http://www.geonames.org/ontology#" + pv.getId());
-
-                    for (Map<String, Object> objects: propertyObjects) {
-                        if (objects.containsKey("@id")) {
-                            String objectId = objects.get("@id").toString();
-                            Result result = this.getResultFromIdentifier(objectId);
-                            if (result != null) {
-                                cl.get(pv.getId()).add(new Cell(result.getId(), result.getName()));
-                            }
-                        }
+            try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+                ResultSet sparqlResults = qexec.execSelect();
+                while (sparqlResults.hasNext()) {
+                    QuerySolution soln = sparqlResults.nextSolution();
+                    if (soln.getLiteral("name") != null) {
+                        cells.add(new Cell(soln.getResource("o").getURI()
+                                .replace(GN_RESOURCE_PREFIX, "")
+                                .replace("/", ""),
+                                soln.getLiteral("name").getString()));
+                    } else {
+                        cells.add(new Cell(soln.getLiteral("o").getString()));
                     }
                 }
+
+            } catch (Exception e) {
+                return null;
             }
+
+            cl.put(pv.getId(), cells);
         }
+
         return cl;
     }
 
     @Override
     public ColumnMetaData columnMetaData(PropertyValueIdAndSettings prop) {
-        // TODO: replace this query with a request to ABSTAT!
-        try {
-            final String aqlQuery = "let objects = (for feature in `geonames-de` return feature.@prop[0].`@id`)\n" +
-                    "for feature in `geonames-de`\n" +
-                    "    filter feature.`@id` in objects\n" +
-                    "    COLLECT propGroup = feature.`http://www.geonames.org/ontology#featureCode`[0].`@id` WITH COUNT INTO numProps\n" +
-                    "    sort propGroup DESC\n" +
-                    "    return {propGroup, numProps}";
-            getLog().debug(prop.getId());
-            Map<String, Object> bindVars = new MapBuilder().put("prop", "http://www.geonames.org/ontology#" + prop.getId()).get();
-            ArangoCursor<BaseDocument> cursor = arangoDB.db(dbName).query(aqlQuery, bindVars, null,
-                    BaseDocument.class);
 
-            if (cursor.hasNext()) {
-                BaseDocument doc = cursor.next();
-                String bestType = doc.getAttribute("propGroup").toString();
-                ColumnMetaData col = new ColumnMetaData();
-                col.setId(prop.getId());
-                col.setName(prop.getId());
-                col.setType(new NameType(bestType.replaceAll("http://www.geonames.org/ontology#", ""),
-                        bestType.replaceAll("http://www.geonames.org/ontology#", "")));
-                return col;
-            }
-        } catch (final ArangoDBException e) {
-            System.err.println("Failed to execute query. " + e.getMessage());
+        String queryString;
+        String onGraph;
+
+        if (this.ontologyGraphName != null) {
+            queryString = String.format("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n" +
+                            "PREFIX owl: <http://www.w3.org/2002/07/owl#>\n" +
+                            "select ?type where {\n" +
+                            "  <%s> rdfs:range [owl:hasValue ?type] .\n" +
+                            "}",
+                    urifyPropertyId(prop.getId()));
+            onGraph = this.ontologyGraphName;
+        } else {
+            // TODO: replace this query with a request to ABSTAT!
+            queryString = String.format(
+                    "PREFIX gn: <%s>\n" +
+                            "select ?type (count(?type) as ?count)\n" +
+                            "where {\n" +
+                            "  ?s <%s> ?o .\n" +
+                            "  OPTIONAL {?o gn:featureCode ?type .}\n" +
+                            "}\n" +
+                            "group by ?type\n" +
+                            "order by desc(?count)",
+                    GN_ONTOLOGY_PREFIX, urifyPropertyId(prop.getId()));
+            onGraph = this.graphName;
         }
 
-        return null;
+        Query sparqlQuery = QueryFactory.create(queryString);
+        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, onGraph, null, null)) {
+            ResultSet sparqlResults = qexec.execSelect();
+
+            ColumnMetaData col = new ColumnMetaData();
+            col.setId(prop.getId());
+            col.setName(prop.getId());
+
+            if (sparqlResults.hasNext()) {
+                Resource mostFreqType = sparqlResults.nextSolution().getResource("type");
+                if (mostFreqType != null) {
+                    String type = mostFreqType.toString().replace(GN_ONTOLOGY_PREFIX, "");
+                    col.setType(new NameType(type, type));
+                }
+            }
+            return col;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Override
+    public ProposePropertiesResponse proposeProperties(String type, int limit) {
+
+        // TODO: replace this query with a request to ABSTAT!
+        String queryString = "select ?p\n" +
+                "where {\n" +
+                "  ?s ?p ?o.\n" +
+                "}\n" +
+                "group by ?p\n" +
+                "order by desc(count (?p))";
+
+        if (type != null && !type.isEmpty()) {
+            // type can be a featureCode (e.g., A.ADM1) or a featureClass (e.g., A), or null
+            String typeProperty = type.contains(".") ? "featureCode" : "featureClass";
+            queryString = String.format(
+                    "PREFIX gn: <%s>\n" +
+                            "select ?p\n" +
+                            "where {\n" +
+                            "?s ?p ?o;\n" +
+                            "gn:%s gn:%s .\n" +
+                            "}\n" +
+                            "group by ?p\n" +
+                            "order by desc(count (?p))",
+                    GN_ONTOLOGY_PREFIX, typeProperty, type);
+        }
+
+        Query sparqlQuery = QueryFactory.create(queryString);
+        try (QueryExecution qexec = QueryExecutionFactory.sparqlService(sparqlEndpoint, sparqlQuery, graphName, null, null)) {
+            ResultSet sparqlResults = qexec.execSelect();
+
+            List<NameType> properties = new ArrayList<>();
+            while (sparqlResults.hasNext()) {
+                QuerySolution soln = sparqlResults.nextSolution();
+                String property = soln.getResource("p").toString().replace(GN_ONTOLOGY_PREFIX, "");
+                properties.add(new NameType(property, property));
+                if (limit > 0 && properties.size() == limit) {
+                    break;
+                }
+            }
+
+            ProposePropertiesResponse res = new ProposePropertiesResponse();
+            res.setProperties(properties);
+            res.setLimit(limit);
+            res.setType(type);
+            return res;
+
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

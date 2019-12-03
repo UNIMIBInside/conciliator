@@ -43,12 +43,10 @@ public class Application {
     }
 
     @Bean
-    public CacheManager cacheManager(@Autowired Config config) {
-        long ttl = Long.valueOf(config.getProperties().getProperty(Config.PROP_CACHE_TTL));
+    public CacheManager cacheManager(@Autowired ApplicationConfig applicationConfig) {
+        long ttl = applicationConfig.getCache().getTtl();
 
-        config.getProperties().getProperty(Config.PROP_CACHE_SIZE);
-
-        MemSize memSize = MemSize.valueOf(config.getProperties().getProperty(Config.PROP_CACHE_SIZE));
+        MemSize memSize = MemSize.valueOf(applicationConfig.getCache().getSize());
 
         LogFactory.getLog(getClass()).info(
                 String.format("Initializing cache TTL=%d secs, size=%d %s",

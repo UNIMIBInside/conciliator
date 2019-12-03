@@ -1,6 +1,6 @@
 package com.codefork.refine.geotargets;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
@@ -30,7 +30,7 @@ public class Geotargets extends WebServiceDataSource {
     private final double threshold = 0.9;
 
     @Autowired
-    public Geotargets(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
+    public Geotargets(ApplicationConfig config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
         super(config, cacheManager, threadPoolFactory, connectionFactory);
         RDFDataMgr.read(this.model, "AdWords_API_Location_Criteria_DE_ES.ttl"); // TODO should be a SPARQL endpoint
     }
@@ -46,8 +46,12 @@ public class Geotargets extends WebServiceDataSource {
     }
 
     private Result getResultFromIdentifier(String identifier) {
+        GeotargetsMetaDataResponse meta = new GeotargetsMetaDataResponse(this.getName());
+        String idSpace = meta.getIdentifierSpace();
+        String schemaSpace = meta.getSchemaSpace();
         String queryString = String.format(
-                "SELECT * WHERE { <http://inside.disco.unimib.it/ontology/geo/%s> ?p ?o . }",
+                "SELECT * WHERE { <%s%s> ?p ?o . }",
+                idSpace,
                 identifier);
 
         Query sparqlQuery = QueryFactory.create(queryString) ;
@@ -66,7 +70,8 @@ public class Geotargets extends WebServiceDataSource {
                             title = soln.getLiteral("o").getString();
                             break;
                         case "http://www.w3.org/1999/02/22-rdf-syntax-ns#type":
-                            nameTypes.add(new NameType(soln.get("o").toString(), soln.get("o").toString()));
+                            String type = soln.get("o").toString().replaceAll(schemaSpace, "");
+                            nameTypes.add(new NameType(type, type));
                             break;
                         default:
                             break;
