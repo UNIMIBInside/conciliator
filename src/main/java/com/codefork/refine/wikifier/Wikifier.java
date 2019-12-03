@@ -57,7 +57,7 @@ public class Wikifier extends WebServiceDataSource {
 
         return String.format("text=%s" +
                 "&userKey=%s" +
-                "&lang=en" +
+                "&lang=de" +
                 "&maxMentionEntropy=3" +
                 "&minLinkFrequency=2",
                 text,

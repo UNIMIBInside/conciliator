@@ -54,6 +54,7 @@ public class Result {
         this.match = match;
     }
 
+
     public String getId() {
         return id;
     }

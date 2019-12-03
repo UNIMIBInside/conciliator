@@ -1,0 +1,8 @@
+version: '3'
+services:
+  conciliator:
+    image: miciav/conciliator:latest
+    ports:
+    - "8080:8080"
+    volumes:
+    - ./configuration:/configuration
