@@ -137,6 +137,11 @@ instructions.
   categories.
 * Based on the Jaro-Winkler Distance between the input query and the category label
 
+### Keyword Category
+
+* Invokes a REST service in charge to analyse semantically a keyword and returning the closest Google Category.
+* The service is available at [Keyword_clustering](https://github.com/UNIMIBInside/ew-shopp-public/tree/master/keyword_clustering)
+
 ## Running Conciliator on Your Own Computer
 
 Install Java 1.8 or greater if you don't already have it.
