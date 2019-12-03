@@ -1,6 +1,6 @@
 package com.codefork.refine.keywords;
 
-import com.codefork.refine.Config;
+import com.codefork.refine.ApplicationConfig;
 import com.codefork.refine.SearchQuery;
 import com.codefork.refine.ThreadPoolFactory;
 import com.codefork.refine.datasource.ConnectionFactory;
@@ -20,29 +20,27 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Properties;
 
 @Component("keywordsMatcher")
 public class SemanticKeywordCategoryMatcher extends WebServiceDataSource {
 
 
-    private static final String SERVICE_HOST = "host";
-    private static final String SERVICE_PORT = "port";
+    private SemanticKeywordCategoryMatcherConfig config;
 
-    private final String host = getConfigProperties().getProperty(SERVICE_HOST);
-    private final int port = Integer.parseInt(getConfigProperties().getProperty(SERVICE_PORT));
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public SemanticKeywordCategoryMatcher(Config config, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory) {
-        super(config, cacheManager, threadPoolFactory, connectionFactory);
+    public SemanticKeywordCategoryMatcher(ApplicationConfig applicationConfig, CacheManager cacheManager, ThreadPoolFactory threadPoolFactory, ConnectionFactory connectionFactory, SemanticKeywordCategoryMatcherConfig config) {
+        super(applicationConfig, cacheManager, threadPoolFactory, connectionFactory);
+        this.config = config;
     }
+
 
     @Override
     public List<Result> search(SearchQuery query) throws Exception {
         List<Result> results = new ArrayList<>();
         if (query.getQuery().isEmpty()) return results;
 
-        String url = new URI("http", null, host, port, "/categorise_keywords", null, null).toURL().toString();
+        String url = new URI("http", null, config.getHost(), config.getPort(), "/categorise_keywords", null, null).toURL().toString();
 
         HttpURLConnection connection = getConnectionFactory().createConnection(url);
 

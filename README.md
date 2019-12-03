@@ -23,6 +23,7 @@ This project supercedes [refine_viaf](https://github.com/codeforkjeff/refine_via
     - [Wikifier](#wikifier)
     - [Geonames](#geonames)
     - [Google Geotargets](#google-geotargets)
+    - [Keyword_to_category](#keyword-category)
 - [Running Conciliator on Your Own Computer](#running-conciliator-on-your-own-computer)
 - [Docker Image](#docker-image)
 - [Configuring OpenRefine](#configuring-openrefine)
