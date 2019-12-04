@@ -14,7 +14,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.util.ArrayList;
@@ -40,7 +39,11 @@ public class SemanticKeywordCategoryMatcher extends WebServiceDataSource {
         List<Result> results = new ArrayList<>();
         if (query.getQuery().isEmpty()) return results;
 
-        String url = new URI("http", null, config.getHost(), config.getPort(), "/categorise_keywords", null, null).toURL().toString();
+        String url = new URI("http", null, config.getHost(), config.getPort(),
+                "/categorise_keywords/" +
+                        query.getQuery() + "/" +
+                        query.getLimit(),
+                null, null).toURL().toString();
 
         HttpURLConnection connection = getConnectionFactory().createConnection(url);
 
@@ -50,14 +53,6 @@ public class SemanticKeywordCategoryMatcher extends WebServiceDataSource {
         connection.setDoInput(true);
         connection.setDoOutput(true); // for enabling POST requests
 
-
-
-        String jsonInputString = "{\"keywords\": [\""+query.getQuery()+"\"]}";
-
-        try(OutputStream os = connection.getOutputStream()) {
-            byte[] input = jsonInputString.getBytes("utf-8");
-            os.write(input, 0, input.length);
-        }
 
 
         JsonNode root = mapper.readTree(new InputStreamReader(connection.getInputStream(), "utf-8"));
